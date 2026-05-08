@@ -1,0 +1,36 @@
+import type { Metadata } from "next";
+import Header from "@/components/Header";
+import Footer from "@/components/Footer";
+import TransportationServiceDetail from "@/components/transportation/TransportationServiceDetail";
+import { SITE_IMAGES } from "@/lib/siteImages";
+
+export const metadata: Metadata = {
+  title: "Anaheim Airport Transportation | LAX, SNA, LGB, BUR, ONT, SAN | TNT Tours",
+  description:
+    "Reliable private airport transportation to and from Anaheim, Disneyland-area hotels, and major Southern California airports including LAX, SNA, Long Beach, Burbank, Ontario, and San Diego.",
+  keywords:
+    "Anaheim airport transportation, LAX to Anaheim transportation, SNA to Disneyland transportation, Anaheim hotel airport transfer, private airport transfer Anaheim",
+};
+
+export default function AirportTransferPage() {
+  return (
+    <>
+      <Header />
+      <TransportationServiceDetail
+        title="Airport Transfers"
+        description="Reliable private airport transportation to and from Anaheim, Disneyland-area hotels, and major Southern California airports including LAX, SNA, Long Beach, Burbank, Ontario, and San Diego."
+        image={SITE_IMAGES.waltDisneyConcertHall}
+        imageAlt="Airport transportation at a California hotel"
+        highlights={[
+          "Door-to-door airport pickup and drop-off.",
+          "Meet & greet service available for smooth arrivals.",
+          "Round-trip pricing available for return flights.",
+          "Great for families, groups, and convention travelers.",
+        ]}
+        ctaLabel="Book airport transfer"
+        ctaHref="/transportation/book?service=airport-transfer"
+      />
+      <Footer />
+    </>
+  );
+}

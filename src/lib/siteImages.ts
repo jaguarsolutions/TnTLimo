@@ -1,0 +1,25 @@
+/** Local, optimized photos in `public/images/site/` (see `scripts/optimize-site-images.mjs`). */
+import { publicUrl } from "@/lib/publicPath";
+
+export const SITE_IMAGES = {
+  hero: publicUrl("/images/site/hero-los-angeles-twilight.jpg"),
+  walkOfFameStar: publicUrl("/images/site/walk-of-fame-disney-star.jpg"),
+  griffithSunsetAerial: publicUrl("/images/site/griffith-observatory-sunset-aerial.jpg"),
+  beverlyHillsSign: publicUrl("/images/site/beverly-hills-sign.jpg"),
+  santaMonicaPalms: publicUrl("/images/site/santa-monica-palms-sunset.jpg"),
+  waltDisneyConcertHall: publicUrl("/images/site/walt-disney-concert-hall.jpg"),
+  universalGlobe: publicUrl("/images/site/universal-studios-globe.jpg"),
+  hollywoodSignHills: publicUrl("/images/site/hollywood-sign-hills.jpg"),
+  griffithObservatoryDay: publicUrl("/images/site/griffith-observatory-day.jpg"),
+  /** Tour originals — `temp_pics/update/` */
+  cryptoComArenaExterior: publicUrl("/images/site/crypto-com-arena-exterior.jpg"),
+  cryptoComArenaStarPlaza: publicUrl("/images/site/crypto-com-arena-star-plaza.jpg"),
+  griffithObservatoryApproach: publicUrl("/images/site/griffith-observatory-approach.jpg"),
+  tclChineseTheatre: publicUrl("/images/site/tcl-chinese-theatre-hollywood.jpg"),
+  hardRockHollywood: publicUrl("/images/site/hard-rock-cafe-hollywood.jpg"),
+  hollywoodLaLaLandTerminator: publicUrl("/images/site/hollywood-la-la-land-terminator.jpg"),
+  classicHollywoodElvisCadillac: publicUrl("/images/site/classic-hollywood-elvis-cadillac.jpg"),
+  theGroveVintageTruck: publicUrl("/images/site/the-grove-vintage-truck.jpg"),
+  walkOfFameOliverStone: publicUrl("/images/site/walk-of-fame-oliver-stone-star.jpg"),
+  santaMonicaYachtHarborSign: publicUrl("/images/site/santa-monica-yacht-harbor-sign.jpg"),
+} as const;

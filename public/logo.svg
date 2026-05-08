@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 80" fill="none" role="img" aria-label="TNT Tours logo">
+  <!-- Hollywood Hills silhouette -->
+  <path d="M0 56 Q20 40 35 44 Q50 30 65 34 Q80 20 95 26 Q108 14 120 18 Q130 10 140 14 Q155 6 168 10 Q180 4 192 8 Q200 12 210 18 Q218 14 228 20 Q238 10 248 16 Q256 20 264 28 Q272 22 280 30 Q288 24 296 32 Q306 28 320 38 L320 80 L0 80 Z" fill="#1C1917"/>
+  <!-- Hollywood Sign letters (stylised) -->
+  <text x="30" y="38" font-family="Georgia, serif" font-size="7" font-weight="bold" fill="#C9A96E" letter-spacing="2" opacity="0.85">HOLLYWOOD</text>
+  <!-- Palm tree left -->
+  <g transform="translate(8, 20)">
+    <!-- trunk -->
+    <path d="M6 36 Q5 30 6 24 Q7 18 6 12" stroke="#2A2520" stroke-width="2" stroke-linecap="round" fill="none"/>
+    <!-- fronds -->
+    <path d="M6 12 Q0 8 -4 4" stroke="#1C4A1C" stroke-width="1.5" stroke-linecap="round" fill="none"/>
+    <path d="M6 12 Q4 6 6 2" stroke="#1C4A1C" stroke-width="1.5" stroke-linecap="round" fill="none"/>
+    <path d="M6 12 Q10 7 14 4" stroke="#1C4A1C" stroke-width="1.5" stroke-linecap="round" fill="none"/>
+    <path d="M6 12 Q12 10 16 9" stroke="#1C4A1C" stroke-width="1.5" stroke-linecap="round" fill="none"/>
+    <path d="M6 12 Q2 10 -2 10" stroke="#1C4A1C" stroke-width="1.5" stroke-linecap="round" fill="none"/>
+  </g>
+  <!-- Palm tree right -->
+  <g transform="translate(300, 16)">
+    <path d="M6 40 Q5 34 6 28 Q7 22 6 14" stroke="#2A2520" stroke-width="2" stroke-linecap="round" fill="none"/>
+    <path d="M6 14 Q0 10 -4 6" stroke="#1C4A1C" stroke-width="1.5" stroke-linecap="round" fill="none"/>
+    <path d="M6 14 Q4 8 6 4" stroke="#1C4A1C" stroke-width="1.5" stroke-linecap="round" fill="none"/>
+    <path d="M6 14 Q10 9 14 6" stroke="#1C4A1C" stroke-width="1.5" stroke-linecap="round" fill="none"/>
+    <path d="M6 14 Q12 12 16 11" stroke="#1C4A1C" stroke-width="1.5" stroke-linecap="round" fill="none"/>
+    <path d="M6 14 Q2 12 -2 12" stroke="#1C4A1C" stroke-width="1.5" stroke-linecap="round" fill="none"/>
+  </g>
+  <!-- Gradient sky glow behind letters -->
+  <defs>
+    <linearGradient id="goldGlow" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#C9A96E" stop-opacity="0"/>
+      <stop offset="50%" stop-color="#C9A96E" stop-opacity="0.08"/>
+      <stop offset="100%" stop-color="#C9A96E" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="sunGlow" cx="50%" cy="50%" r="50%" fx="50%" fy="50%" id="sunRadial">
+      <stop offset="0%" stop-color="#FFD580" stop-opacity="0.35"/>
+      <stop offset="100%" stop-color="#C9A96E" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <!-- Sunset glow -->
+  <ellipse cx="160" cy="38" rx="60" ry="22" fill="url(#goldGlow)"/>
+  <!-- Main logo text -->
+  <text x="160" y="67" font-family="Georgia, 'Times New Roman', serif" font-size="28" font-weight="700" fill="#0C0B0A" text-anchor="middle" letter-spacing="-0.5">
+    TNT<tspan fill="#C9A96E">Tours</tspan>
+  </text>
+  <!-- Tagline -->
+  <text x="160" y="77" font-family="'Helvetica Neue', Arial, sans-serif" font-size="6.5" fill="#7A7268" text-anchor="middle" letter-spacing="3" font-weight="500">LOS ANGELES</text>
+</svg>

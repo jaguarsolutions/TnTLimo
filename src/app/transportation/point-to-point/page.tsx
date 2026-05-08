@@ -1,0 +1,36 @@
+import type { Metadata } from "next";
+import Header from "@/components/Header";
+import Footer from "@/components/Footer";
+import TransportationServiceDetail from "@/components/transportation/TransportationServiceDetail";
+import { SITE_IMAGES } from "@/lib/siteImages";
+
+export const metadata: Metadata = {
+  title: "Point-to-Point Transportation in Anaheim & LA | TNT Tours",
+  description:
+    "Private transportation between hotels, attractions, airports, restaurants, event venues, and other destinations across Anaheim and Los Angeles.",
+  keywords:
+    "point to point transportation Anaheim, Anaheim to LA transportation, hotel transfer Anaheim, group transportation Anaheim",
+};
+
+export default function PointToPointPage() {
+  return (
+    <>
+      <Header />
+      <TransportationServiceDetail
+        title="Point-to-Point Transportation"
+        description="Private transportation between hotels, attractions, airports, restaurants, event venues, and other destinations across Anaheim and Los Angeles."
+        image={SITE_IMAGES.griffithObservatoryDay}
+        imageAlt="Point-to-point ride in Los Angeles"
+        highlights={[
+          "Fixed route pricing examples for Anaheim to LAX, SNA, Universal Studios, and Downtown LA.",
+          "Optional extra stop keeps your trip flexible.",
+          "Simple booking for airport transfers, meetings, and attractions.",
+          "Passenger groups from 1 to 14 supported with quick quotes.",
+        ]}
+        ctaLabel="Book point-to-point"
+        ctaHref="/transportation/book?service=point-to-point"
+      />
+      <Footer />
+    </>
+  );
+}
