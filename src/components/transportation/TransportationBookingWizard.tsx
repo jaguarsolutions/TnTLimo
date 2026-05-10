@@ -413,8 +413,67 @@ export default function TransportationBookingWizard() {
     event.preventDefault();
     setError("");
     setSubmitStatus("sending");
-    const payload = buildSubmissionPayload();
 
+    // If the total is null (group 15+ or unknown route), fall back to the email
+    // quote flow — these aren't auto-bookable yet.
+    if (priceSummary.total === null) {
+      await submitEmailQuote();
+      return;
+    }
+
+    // Standard flow: persist booking + redirect to Stripe Checkout.
+    try {
+      const pickupAtIso = computePickupIso();
+      if (!pickupAtIso) {
+        setError("Pickup date/time is missing.");
+        setSubmitStatus("error");
+        return;
+      }
+
+      const subtotalCents = Math.round((priceSummary.basePrice ?? 0 + priceSummary.addOns) * 100);
+      const gratuityCents = Math.round((priceSummary.gratuity ?? 0) * 100);
+      const totalCents = Math.round((priceSummary.total ?? 0) * 100);
+
+      const res = await fetch("/api/bookings/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          service: state.service,
+          pickupAtIso,
+          customer: {
+            firstName: state.firstName,
+            lastName: state.lastName,
+            email: state.email,
+            phone: state.phone,
+          },
+          totals: {
+            subtotalCents: subtotalCents > 0 ? subtotalCents : totalCents - gratuityCents,
+            gratuityCents,
+            totalCents,
+          },
+          payload: state,
+        }),
+      });
+
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(data.error ?? "Failed to create booking");
+      }
+
+      const { checkoutUrl } = (await res.json()) as { checkoutUrl: string };
+      // Redirect to Stripe-hosted checkout. No success state in the wizard —
+      // Stripe handles UI from here, and customers come back via /booking/success.
+      window.location.href = checkoutUrl;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Booking could not be started.";
+      setError(message);
+      setSubmitStatus("error");
+    }
+  }
+
+  /** For legacy 15+ / custom-quote path — still uses Web3Forms/FormSubmit. */
+  async function submitEmailQuote() {
+    const payload = buildSubmissionPayload();
     try {
       if (WEB3_KEY) {
         const res = await fetch("https://api.web3forms.com/submit", {
@@ -446,6 +505,19 @@ export default function TransportationBookingWizard() {
     } catch {
       setSubmitStatus("error");
     }
+  }
+
+  /**
+   * Convert datetime-local string to ISO. We interpret the value as the
+   * customer's browser-local time. Confirmation emails always render in PT, so
+   * customers booking from outside California should pick the LA-local pickup
+   * time directly (the form copy reminds them).
+   */
+  function computePickupIso(): string | null {
+    const local = state.pickupDateTime || state.flightTime;
+    if (!local) return null;
+    const date = new Date(local);
+    return Number.isNaN(date.getTime()) ? null : date.toISOString();
   }
 
   /* ── Sub-renders ──────────────────────────────────────── */
@@ -1182,8 +1254,12 @@ export default function TransportationBookingWizard() {
     <>
       <StepHeader
         eyebrow="Last step"
-        title="Confirm your booking request"
-        subtitle="We’ll receive it instantly and reply by phone or email with confirmation. No card needed yet."
+        title="Confirm and pay"
+        subtitle={
+          priceSummary.total !== null
+            ? "Review your booking, then continue to secure checkout. Card is charged in full at booking; full refund if you cancel up to 24 hours before pickup."
+            : "Group sizes 15+ are quoted manually — we'll receive your details and reply with a quote, no card required at this step."
+        }
       />
 
       <form onSubmit={handleSubmit} className="space-y-5">
@@ -1206,10 +1282,10 @@ export default function TransportationBookingWizard() {
 
         {submitStatus === "success" ? (
           <div className="rounded-2xl border border-green-200 bg-green-50 p-5 text-sm text-green-900" role="status">
-            <p className="font-semibold">Booking request received.</p>
+            <p className="font-semibold">Quote request received.</p>
             <p className="mt-1 text-green-800/90">
-              Thank you, {state.firstName}! We’ll reply shortly to <span className="font-medium">{state.email}</span> or call{" "}
-              <span className="font-medium">{state.phone}</span> to confirm pickup details.
+              Thank you, {state.firstName}! We&apos;ll reply shortly to <span className="font-medium">{state.email}</span> with
+              a custom quote for your group.
             </p>
             <p className="mt-3 text-xs text-green-800/80">
               Need to reach us right now? Call{" "}
@@ -1223,23 +1299,38 @@ export default function TransportationBookingWizard() {
               disabled={submitStatus === "sending"}
               className={`${buttonPrimary} w-full sm:w-auto`}
             >
-              {submitStatus === "sending" ? "Sending…" : "Send booking request"}
+              {submitStatus === "sending"
+                ? priceSummary.total !== null
+                  ? "Redirecting to checkout…"
+                  : "Sending…"
+                : priceSummary.total !== null
+                  ? `Continue to secure checkout · ${formatCurrency(priceSummary.total)}`
+                  : "Request a quote"}
               {submitStatus !== "sending" && (
                 <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <path d="M5 12h14M13 5l7 7-7 7" />
                 </svg>
               )}
             </button>
+            {priceSummary.total !== null && (
+              <p className="text-xs text-muted leading-relaxed inline-flex items-center gap-1.5">
+                <svg className="w-3.5 h-3.5 text-muted/70" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} aria-hidden="true">
+                  <rect x="3" y="11" width="18" height="11" rx="2" />
+                  <path d="M7 11V7a5 5 0 0110 0v4" />
+                </svg>
+                Secure payment by Stripe. Full refund if cancelled at least 24 hours before pickup.
+              </p>
+            )}
             {submitStatus === "error" && (
               <p className="rounded-2xl border border-sunset/20 bg-sunset/10 p-4 text-sm text-ink" role="alert">
-                Something went wrong sending your request. Please email{" "}
+                {error || "Something went wrong. Please try again, or"} email{" "}
                 <a className="underline" href={`mailto:${SITE_CONTACT.email}`}>{SITE_CONTACT.email}</a> or call{" "}
                 <a className="underline" href={SITE_CONTACT.phoneHref}>{SITE_CONTACT.phoneDisplay}</a>.
               </p>
             )}
             <p className="text-xs text-muted leading-relaxed">
-              By sending this request you agree to be contacted by TNT Tours about your booking. Your details are not
-              shared with third parties.
+              By continuing you agree to TNT Tours&apos; terms. Your card is processed securely by Stripe; we never store
+              card details.
             </p>
           </>
         )}

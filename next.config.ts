@@ -1,18 +1,18 @@
 import type { NextConfig } from "next";
 
 /**
- * Production deploy (Hostinger, etc.): leave NEXT_PUBLIC_BASE_PATH unset so the site
- * lives at the domain root. Only set NEXT_PUBLIC_BASE_PATH if you intentionally host
- * under a subfolder (e.g. /blog) — must match that folder on the server.
+ * Optional sub-path hosting (e.g. tnttours.com/something) — set NEXT_PUBLIC_BASE_PATH.
+ * For root-domain hosting on Vercel, leave it unset.
  */
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH?.replace(/\/$/, "") ?? "";
 
 const nextConfig: NextConfig = {
-  output: "export",
+  // Static export was used for the Hostinger fallback. With API routes (Stripe,
+  // bookings, refunds) and a Postgres database we now need a server runtime, so
+  // the app deploys as a normal Next.js application on Vercel.
   ...(basePath ? { basePath, assetPrefix: basePath } : {}),
 
   images: {
-    unoptimized: true,
     remotePatterns: [
       { protocol: "https", hostname: "images.unsplash.com" },
       { protocol: "https", hostname: "source.unsplash.com" },
