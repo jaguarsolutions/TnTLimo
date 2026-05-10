@@ -1,5 +1,28 @@
 import { SITE_IMAGES } from "@/lib/siteImages";
 
+/**
+ * Re-exports of tenant-agnostic pricing primitives. These now live in
+ * `@/lib/booking/pricing` so the server can recompute prices authoritatively
+ * (the wizard's client-side `priceSummary` still imports them via this file
+ * for backwards compat).
+ */
+export {
+  AIRPORT_OPTIONS,
+  AIRPORT_PRICING,
+  CHILD_SEAT_OPTIONS,
+  GRATUITY_OPTIONS,
+  HOURLY_RATES,
+  PASSENGER_GROUPS,
+  POINT_TO_POINT_FIXED_ROUTES,
+  SERVICE_LABELS,
+  calculateAirportTransferPrice,
+  calculateHourlyCharterPrice,
+  calculatePointToPointPrice,
+  formatCurrency,
+  shouldShowGroupQuoteMessage,
+  type BookableServiceCode,
+} from "@/lib/booking/pricing";
+
 export type TransportationServiceCode =
   | "airport-transfer"
   | "disneyland-transportation"
@@ -70,77 +93,11 @@ export const TRANSPORTATION_OVERVIEW_CARDS = [
   },
 ];
 
-export const AIRPORT_OPTIONS = ["SNA", "LAX", "LGB", "BUR", "ONT", "SAN"] as const;
-
-export const PASSENGER_GROUPS = [
-  { label: "1-4 passengers", value: "1-4" },
-  { label: "5-6 passengers", value: "5-6" },
-  { label: "7-8 passengers", value: "7-8" },
-  { label: "9-10 passengers", value: "9-10" },
-  { label: "11-14 passengers", value: "11-14" },
-  { label: "More than 14 passengers", value: "15+" },
-] as const;
-
-export const CHILD_SEAT_OPTIONS = [
-  { label: "Infant seat", value: "infant" },
-  { label: "Rear-facing", value: "rear-facing" },
-  { label: "Forward-facing", value: "forward-facing" },
-  { label: "Booster", value: "booster" },
-  { label: "High-back booster", value: "high-back-booster" },
-] as const;
-
-export const GRATUITY_OPTIONS = [
-  { label: "15%", value: "15" },
-  { label: "20%", value: "20" },
-  { label: "25%", value: "25" },
-  { label: "Cash at pickup", value: "cash" },
-] as const;
-
-export const AIRPORT_PRICING = {
-  SNA: { "1-4": 85, "5-6": 110, "7-8": 145, "9-10": 165, "11-14": 185 },
-  LAX: { "1-4": 175, "5-6": 195, "7-8": 220, "9-10": 260, "11-14": 320 },
-  LGB: { "1-4": 95, "5-6": 120, "7-8": 140, "9-10": 180, "11-14": 220 },
-  BUR: { "1-4": 185, "5-6": 210, "7-8": 245, "9-10": 285, "11-14": 325 },
-  ONT: { "1-4": 185, "5-6": 195, "7-8": 235, "9-10": 295, "11-14": 335 },
-  SAN: { "1-4": 375, "5-6": 425, "7-8": 495, "9-10": 550, "11-14": 595 },
-} as const;
-
-export const HOURLY_RATES = {
-  "1-4": 95,
-  "5-6": 115,
-  "7-8": 135,
-  "9-10": 155,
-  "11-14": 175,
-} as const;
-
-export const POINT_TO_POINT_FIXED_ROUTES: Record<string, number> = {
-  "Anaheim to LAX": 225,
-  "Anaheim to SNA": 95,
-  "Anaheim to Universal Studios": 120,
-  "Anaheim to Downtown LA": 150,
-};
-
-export const SERVICE_LABELS: Record<TransportationServiceCode, string> = {
-  "airport-transfer": "Airport Transfer",
-  "disneyland-transportation": "Disneyland & Hotel Transportation",
-  "point-to-point": "Point-to-Point Transportation",
-  "hourly-charter": "Hourly Charter Service",
-};
-
-/**
- * Codes the booking wizard currently has pricing logic for.
- * "disneyland-transportation" is a marketing category that maps to
- * point-to-point or hourly-charter at booking time, so it isn't its own
- * wizard step yet.
- */
-export type BookableServiceCode =
-  | "airport-transfer"
-  | "point-to-point"
-  | "hourly-charter";
+import { BOOKABLE_SERVICE_CODES, type BookableServiceCode } from "@/lib/booking/pricing/data";
 
 export const BOOKABLE_TRANSPORTATION_SERVICES = TRANSPORTATION_SERVICES.filter(
   (svc): svc is typeof svc & { code: BookableServiceCode } =>
-    svc.code !== "disneyland-transportation"
+    (BOOKABLE_SERVICE_CODES as readonly string[]).includes(svc.code)
 );
 
 export const SELECTION_STEPS = [
@@ -150,83 +107,6 @@ export const SELECTION_STEPS = [
   "Customer information",
   "Review summary",
 ] as const;
-
-export const formatCurrency = (value: number | null) => {
-  if (value === null || Number.isNaN(value)) {
-    return "—";
-  }
-
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 0,
-  }).format(value);
-};
-
-export function calculateAirportTransferPrice(
-  airport: string,
-  passengerGroup: string,
-  meetAndGreet: boolean,
-  roundTrip: boolean
-) {
-  const airportRates = (AIRPORT_PRICING as Record<string, Record<string, number>>)[airport];
-  const base = airportRates?.[passengerGroup] ?? null;
-  if (base === null) return null;
-  const total = base * (roundTrip ? 2 : 1);
-  const addOns = meetAndGreet ? 30 : 0;
-  return { base, total, addOns, roundTrip };
-}
-
-export function calculatePointToPointPrice(
-  pickup: string,
-  dropoff: string,
-  passengerGroup: string,
-  extraStop: boolean
-) {
-  const routeMatch = inferPointToPointRoute(pickup, dropoff);
-  const base = routeMatch ? POINT_TO_POINT_FIXED_ROUTES[routeMatch] : null;
-  const addOns = extraStop ? 20 : 0;
-  const price = base === null ? null : base + addOns;
-  return { routeMatch, base, total: price, addOns };
-}
-
-function inferPointToPointRoute(pickup: string, dropoff: string) {
-  const normalized = (value: string) => value.toLowerCase();
-  const from = normalized(pickup);
-  const to = normalized(dropoff);
-  const has = (haystack: string, needle: string) => haystack.includes(needle);
-
-  const routeVariants: Array<[string[], string[], string]> = [
-    [["anaheim"], ["lax", "los angeles international airport"], "Anaheim to LAX"],
-    [["anaheim"], ["sna", "john wayne", "john wayne airport"], "Anaheim to SNA"],
-    [["anaheim"], ["universal", "universal studios"], "Anaheim to Universal Studios"],
-    [["anaheim"], ["downtown", "dtla", "los angeles"], "Anaheim to Downtown LA"],
-  ];
-
-  for (const [fromKeys, toKeys, route] of routeVariants) {
-    const fromMatch = fromKeys.some((term) => has(from, term)) || toKeys.some((term) => has(from, term));
-    const toMatch = toKeys.some((term) => has(to, term)) || fromKeys.some((term) => has(to, term));
-    if (fromMatch && toMatch) {
-      return route;
-    }
-  }
-
-  return null;
-}
-
-export function calculateHourlyCharterPrice(
-  passengerGroup: string,
-  hours: number
-) {
-  const rate = (HOURLY_RATES as Record<string, number>)[passengerGroup];
-  if (!rate || hours < 4) return null;
-  const total = rate * hours;
-  return { rate, total };
-}
-
-export function shouldShowGroupQuoteMessage(passengerGroup: string) {
-  return passengerGroup === "15+";
-}
 
 export const TRANSPORTATION_SERVICE_DETAILS = {
   "airport-transfer": {
