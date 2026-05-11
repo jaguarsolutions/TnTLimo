@@ -117,17 +117,27 @@ export default async function BookingSuccessPage({ searchParams }: PageProps) {
             </div>
           )}
 
-          <p className="mt-8 text-center font-sans text-sm text-muted leading-relaxed">
-            Questions? Email{" "}
-            <a href={`mailto:${tenant.supportEmail}`} className="text-gold hover:underline">
-              {tenant.supportEmail}
-            </a>{" "}
-            or call{" "}
-            <a href={tenant.supportPhone.href} className="text-gold hover:underline">
-              {tenant.supportPhone.display}
-            </a>
-            .
-          </p>
+          <div className="mt-8 rounded-2xl border border-border bg-cream p-5 text-sm text-muted leading-relaxed space-y-2">
+            <p>
+              <span className="font-semibold text-ink">Need to cancel?</span> You can cancel for a
+              full refund up to <span className="font-semibold text-ink">24 hours before pickup</span>.
+              Use the "Manage your booking" link in your confirmation email, or contact us directly.
+            </p>
+            <p>
+              <span className="font-semibold text-ink">Need to change your pickup time or address?</span>{" "}
+              Cancel and rebook, or call us and we'll adjust it for you.
+            </p>
+            <p>
+              Questions? Email{" "}
+              <a href={`mailto:${tenant.supportEmail}`} className="text-gold hover:underline">
+                {tenant.supportEmail}
+              </a>{" "}
+              or call{" "}
+              <a href={tenant.supportPhone.href} className="text-gold hover:underline">
+                {tenant.supportPhone.display}
+              </a>.
+            </p>
+          </div>
         </div>
       </main>
       <Footer />
