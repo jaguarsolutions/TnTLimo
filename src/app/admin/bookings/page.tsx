@@ -4,6 +4,7 @@ import { db } from "@/lib/booking/db";
 import { bookings, type BookingStatus } from "@/lib/booking/schema";
 import { signManageToken } from "@/lib/booking/manageToken";
 import { getTenant } from "@/lib/tenant";
+import AdminConfirmButton from "@/components/booking/AdminConfirmButton";
 
 export const dynamic = "force-dynamic";
 
@@ -174,14 +175,19 @@ export default async function AdminBookingsPage({ searchParams }: PageProps) {
                         }).format(new Date(b.createdAt))}
                       </td>
                       <td className="px-4 py-3 text-right">
-                        <Link
-                          href={manageHref}
-                          className="text-amber-700 hover:text-amber-900 underline text-xs"
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          Open ↗
-                        </Link>
+                        <div className="flex items-center justify-end gap-3">
+                          {b.status === "pending" && (
+                            <AdminConfirmButton bookingId={b.id} />
+                          )}
+                          <Link
+                            href={manageHref}
+                            className="text-amber-700 hover:text-amber-900 underline text-xs"
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            Open ↗
+                          </Link>
+                        </div>
                       </td>
                     </tr>
                   );

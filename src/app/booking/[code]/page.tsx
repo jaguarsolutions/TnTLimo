@@ -126,6 +126,11 @@ export default async function ManageBookingPage({ params, searchParams }: PagePr
                 PT
               </Row>
               <Row label="Phone">{booking.customerPhone}</Row>
+              {(() => {
+                const payload = booking.payload as Record<string, unknown>;
+                const notes = typeof payload?.notes === "string" ? payload.notes.trim() : "";
+                return notes ? <Row label="Notes">{notes}</Row> : null;
+              })()}
               <Row label="Subtotal">${(booking.subtotalCents / 100).toFixed(2)}</Row>
               {booking.gratuityCents > 0 && (
                 <Row label="Gratuity">${(booking.gratuityCents / 100).toFixed(2)}</Row>
