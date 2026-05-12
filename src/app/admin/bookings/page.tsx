@@ -5,6 +5,7 @@ import { bookings, type BookingStatus } from "@/lib/booking/schema";
 import { signManageToken } from "@/lib/booking/manageToken";
 import { getTenant } from "@/lib/tenant";
 import AdminConfirmButton from "@/components/booking/AdminConfirmButton";
+import AdminResendEmailButton from "@/components/booking/AdminResendEmailButton";
 
 export const dynamic = "force-dynamic";
 
@@ -175,18 +176,52 @@ export default async function AdminBookingsPage({ searchParams }: PageProps) {
                         }).format(new Date(b.createdAt))}
                       </td>
                       <td className="px-4 py-3 text-right">
-                        <div className="flex items-center justify-end gap-3">
-                          {b.status === "pending" && (
-                            <AdminConfirmButton bookingId={b.id} />
+                        <div className="flex flex-col items-end gap-1.5">
+                          {/* Email status — surfaces silent Resend failures */}
+                          {b.status === "confirmed" && (
+                            b.confirmationEmailSentAt ? (
+                              <span
+                                className="text-[10px] text-stone-500"
+                                title={`Sent ${new Intl.DateTimeFormat("en-US", {
+                                  month: "short",
+                                  day: "numeric",
+                                  hour: "numeric",
+                                  minute: "2-digit",
+                                }).format(new Date(b.confirmationEmailSentAt))}`}
+                              >
+                                ✉ sent
+                              </span>
+                            ) : (
+                              <span
+                                className="text-[10px] text-orange-700 font-semibold"
+                                title={b.confirmationEmailLastError ?? "Email not yet sent"}
+                              >
+                                ⚠ email failed
+                                {b.confirmationEmailAttempts > 0 && (
+                                  <> · {b.confirmationEmailAttempts}×</>
+                                )}
+                              </span>
+                            )
                           )}
-                          <Link
-                            href={manageHref}
-                            className="text-amber-700 hover:text-amber-900 underline text-xs"
-                            target="_blank"
-                            rel="noreferrer"
-                          >
-                            Open ↗
-                          </Link>
+                          <div className="flex items-center gap-3">
+                            {b.status === "pending" && (
+                              <AdminConfirmButton bookingId={b.id} />
+                            )}
+                            {b.status === "confirmed" && !b.confirmationEmailSentAt && (
+                              <AdminResendEmailButton bookingId={b.id} variant="retry" />
+                            )}
+                            {b.status === "confirmed" && b.confirmationEmailSentAt && (
+                              <AdminResendEmailButton bookingId={b.id} variant="resend" />
+                            )}
+                            <Link
+                              href={manageHref}
+                              className="text-amber-700 hover:text-amber-900 underline text-xs"
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              Open ↗
+                            </Link>
+                          </div>
                         </div>
                       </td>
                     </tr>

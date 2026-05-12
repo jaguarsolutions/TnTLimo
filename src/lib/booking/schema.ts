@@ -58,6 +58,23 @@ export const bookings = pgTable(
     cancellationReason: text("cancellation_reason"),
     cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
 
+    /**
+     * Timestamp the confirmation email was successfully delivered to Resend.
+     * Tracked separately from `status` so a webhook retry whose email step
+     * previously failed can recover. NULL means: status may be confirmed but
+     * we never managed to send the customer email yet — retry candidates.
+     */
+    confirmationEmailSentAt: timestamp("confirmation_email_sent_at", { withTimezone: true }),
+
+    /**
+     * Counter of failed email-send attempts. Useful for diagnostics on the
+     * admin page; not currently used to gate retries.
+     */
+    confirmationEmailAttempts: integer("confirmation_email_attempts").notNull().default(0),
+
+    /** Last email error message, if any — surfaced in the admin dashboard. */
+    confirmationEmailLastError: text("confirmation_email_last_error"),
+
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

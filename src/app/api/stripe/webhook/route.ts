@@ -4,7 +4,7 @@ import type Stripe from "stripe";
 import { db } from "@/lib/booking/db";
 import { bookings } from "@/lib/booking/schema";
 import { getStripe } from "@/lib/booking/stripe";
-import { sendBookingConfirmation } from "@/lib/booking/email/send";
+import { dispatchConfirmationEmail } from "@/lib/booking/email/dispatch";
 
 export const runtime = "nodejs";
 
@@ -85,26 +85,34 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     return;
   }
 
-  if (existing.status === "confirmed") {
-    return;
+  // STAGE 1: promote to confirmed (idempotent — skip if already confirmed).
+  let current = existing;
+  if (current.status !== "confirmed") {
+    const paymentIntentId =
+      typeof session.payment_intent === "string"
+        ? session.payment_intent
+        : session.payment_intent?.id ?? null;
+
+    const [updated] = await db
+      .update(bookings)
+      .set({
+        status: "confirmed",
+        stripePaymentIntentId: paymentIntentId,
+        updatedAt: new Date(),
+      })
+      .where(eq(bookings.id, bookingId))
+      .returning();
+    if (!updated) return;
+    current = updated;
   }
 
-  const paymentIntentId =
-    typeof session.payment_intent === "string" ? session.payment_intent : session.payment_intent?.id ?? null;
-
-  const [updated] = await db
-    .update(bookings)
-    .set({
-      status: "confirmed",
-      stripePaymentIntentId: paymentIntentId,
-      updatedAt: new Date(),
-    })
-    .where(eq(bookings.id, bookingId))
-    .returning();
-
-  if (!updated) return;
-
-  await sendBookingConfirmation(updated);
+  // STAGE 2: send the confirmation email — idempotent independently of status.
+  // If this fails we throw so the webhook returns 500 → Stripe retries → next
+  // attempt resends the email (status stays confirmed, no double-charge risk).
+  const result = await dispatchConfirmationEmail(current);
+  if (!result.ok) {
+    throw new Error(`Confirmation email failed: ${result.error}`);
+  }
 }
 
 async function handleCheckoutFailed(session: Stripe.Checkout.Session) {

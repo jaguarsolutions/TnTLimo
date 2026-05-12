@@ -13,4 +13,5 @@ export { isWithinFreeCancelWindow, hoursUntilPickup } from "./cancellation";
 export { signManageToken, verifyManageToken } from "./manageToken";
 export { getStripe, withTenantStripe } from "./stripe";
 export { sendBookingConfirmation, sendBookingCancellation } from "./email/send";
+export { dispatchConfirmationEmail } from "./email/dispatch";
 export * from "./pricing";

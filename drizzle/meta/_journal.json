@@ -15,6 +15,13 @@
       "when": 1778437416247,
       "tag": "0001_luxuriant_amazoness",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1778546162472,
+      "tag": "0002_abandoned_surge",
+      "breakpoints": true
     }
   ]
 }
