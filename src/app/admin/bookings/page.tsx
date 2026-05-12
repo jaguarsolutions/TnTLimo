@@ -6,6 +6,7 @@ import { signManageToken } from "@/lib/booking/manageToken";
 import { getTenant } from "@/lib/tenant";
 import AdminConfirmButton from "@/components/booking/AdminConfirmButton";
 import AdminResendEmailButton from "@/components/booking/AdminResendEmailButton";
+import AdminCancelButton from "@/components/booking/AdminCancelButton";
 
 export const dynamic = "force-dynamic";
 
@@ -203,7 +204,7 @@ export default async function AdminBookingsPage({ searchParams }: PageProps) {
                               </span>
                             )
                           )}
-                          <div className="flex items-center gap-3">
+                          <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1">
                             {b.status === "pending" && (
                               <AdminConfirmButton bookingId={b.id} />
                             )}
@@ -212,6 +213,13 @@ export default async function AdminBookingsPage({ searchParams }: PageProps) {
                             )}
                             {b.status === "confirmed" && b.confirmationEmailSentAt && (
                               <AdminResendEmailButton bookingId={b.id} variant="resend" />
+                            )}
+                            {(b.status === "confirmed" || b.status === "pending") && (
+                              <AdminCancelButton
+                                bookingId={b.id}
+                                confirmationCode={b.confirmationCode}
+                                total={`$${(b.totalCents / 100).toFixed(2)}`}
+                              />
                             )}
                             <Link
                               href={manageHref}

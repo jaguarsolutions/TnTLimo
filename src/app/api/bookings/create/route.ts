@@ -52,6 +52,29 @@ function isBookableService(value: unknown): value is BookableServiceCode {
 }
 
 export async function POST(request: Request) {
+  // Short id we surface to the client so a user-reported failure can be
+  // correlated with the matching line in Vercel's function logs.
+  const diagnosticId = Math.random().toString(36).slice(2, 8);
+
+  try {
+    return await handleCreate(request, diagnosticId);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`[bookings/create ${diagnosticId}] unhandled error:`, err);
+    return NextResponse.json(
+      {
+        error:
+          "We couldn't start your booking. Please try again, or contact us if it keeps failing.",
+        diagnosticId,
+        // Surface message in non-prod so dev tab shows it; in prod it's omitted.
+        ...(process.env.NODE_ENV !== "production" ? { detail: message } : {}),
+      },
+      { status: 500 }
+    );
+  }
+}
+
+async function handleCreate(request: Request, diagnosticId: string) {
   let body: CreateBookingPayload;
   try {
     body = (await request.json()) as CreateBookingPayload;
@@ -60,24 +83,26 @@ export async function POST(request: Request) {
   }
 
   const { service, pickupAtIso, customer, payload } = body;
+  const reject = (error: string, status: number) => {
+    console.warn(`[bookings/create ${diagnosticId}] rejected: ${error}`);
+    return NextResponse.json({ error, diagnosticId }, { status });
+  };
 
-  if (!isBookableService(service)) {
-    return NextResponse.json({ error: "Unknown service" }, { status: 400 });
-  }
+  if (!isBookableService(service)) return reject("Unknown service", 400);
   if (!pickupAtIso || Number.isNaN(Date.parse(pickupAtIso))) {
-    return NextResponse.json({ error: "Pickup time is required" }, { status: 400 });
+    return reject("Pickup time is required", 400);
   }
   if (!customer?.firstName || !customer.lastName) {
-    return NextResponse.json({ error: "Customer name is required" }, { status: 400 });
+    return reject("Customer name is required", 400);
   }
   if (!customer.email || !isValidEmail(customer.email)) {
-    return NextResponse.json({ error: "Valid customer email is required" }, { status: 400 });
+    return reject("Valid customer email is required", 400);
   }
   if (!customer.phone || customer.phone.replace(/\D/g, "").length < 7) {
-    return NextResponse.json({ error: "Customer phone is required" }, { status: 400 });
+    return reject("Customer phone is required", 400);
   }
   if (!payload || typeof payload !== "object") {
-    return NextResponse.json({ error: "Booking payload is required" }, { status: 400 });
+    return reject("Booking payload is required", 400);
   }
 
   /* ── AUTHORITATIVE SERVER-SIDE PRICE ───────────────────────────────────

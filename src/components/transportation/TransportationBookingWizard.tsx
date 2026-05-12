@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { useSearchParams } from "next/navigation";
 import {
   AIRPORT_OPTIONS,
@@ -136,14 +137,17 @@ const SERVICE_ICONS: Record<ServiceCode, React.ReactNode> = {
 };
 
 const CheckBadge = () => (
-  <span
+  <motion.span
     aria-hidden="true"
+    initial={{ scale: 0.6, opacity: 0 }}
+    animate={{ scale: 1, opacity: 1 }}
+    transition={{ type: "spring", stiffness: 480, damping: 22 }}
     className="absolute top-3 right-3 inline-flex h-7 w-7 items-center justify-center rounded-full bg-gold text-ink shadow-sm"
   >
     <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
       <path d="M5 13l4 4L19 7" />
     </svg>
-  </span>
+  </motion.span>
 );
 
 function todayLocal() {
@@ -199,7 +203,10 @@ export default function TransportationBookingWizard() {
     return { service: null, step: 1 };
   }, [searchParams]);
 
+  const reducedMotion = useReducedMotion();
   const [step, setStep] = useState(initialFromUrl.step);
+  /** Direction of last step change (forward = 1, back = -1). Drives slide dir. */
+  const [stepDirection, setStepDirection] = useState<1 | -1>(1);
   const [highestStep, setHighestStep] = useState(initialFromUrl.step);
   const [state, setState] = useState<WizardState>(() => ({
     ...INITIAL_STATE,
@@ -296,6 +303,7 @@ export default function TransportationBookingWizard() {
   const goToStep = (target: number) => {
     setError("");
     if (target < 1 || target > TOTAL_STEPS) return;
+    setStepDirection(target >= step ? 1 : -1);
     setStep(target);
     setHighestStep((current) => Math.max(current, target));
   };
@@ -456,8 +464,18 @@ export default function TransportationBookingWizard() {
       });
 
       if (!res.ok) {
-        const data = (await res.json().catch(() => ({}))) as { error?: string };
-        throw new Error(data.error ?? "Failed to create booking");
+        const data = (await res.json().catch(() => ({}))) as {
+          error?: string;
+          diagnosticId?: string;
+          detail?: string;
+        };
+        const base = data.error ?? "Failed to create booking";
+        const ref = data.diagnosticId ? ` (ref: ${data.diagnosticId})` : "";
+        // `detail` is only included in non-production builds — surfaces the
+        // underlying exception so local dev doesn't require checking the server
+        // terminal to know why the call failed.
+        const dev = data.detail ? `\nDetail: ${data.detail}` : "";
+        throw new Error(`${base}${ref}${dev}`);
       }
 
       const { checkoutUrl } = (await res.json()) as { checkoutUrl: string };
@@ -608,9 +626,18 @@ export default function TransportationBookingWizard() {
 
       <div className="mt-5 border-t border-border pt-4 flex items-center justify-between">
         <span className="font-display text-lg font-semibold text-ink">Total</span>
-        <span className="font-display text-2xl font-semibold text-ink tabular-nums">
-          {priceSummary.total !== null ? formatCurrency(priceSummary.total) : "—"}
-        </span>
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.span
+            key={priceSummary.total ?? "pending"}
+            initial={reducedMotion ? { opacity: 1 } : { opacity: 0, y: -4, scale: 0.96 }}
+            animate={reducedMotion ? { opacity: 1 } : { opacity: 1, y: 0, scale: 1 }}
+            exit={reducedMotion ? { opacity: 0 } : { opacity: 0, y: 4, scale: 0.96 }}
+            transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
+            className="font-display text-2xl font-semibold text-ink tabular-nums"
+          >
+            {priceSummary.total !== null ? formatCurrency(priceSummary.total) : "—"}
+          </motion.span>
+        </AnimatePresence>
       </div>
 
       {priceSummary.pending && (
@@ -764,24 +791,72 @@ export default function TransportationBookingWizard() {
             excludeCategories={["airport"]}
           />
 
-          {/* 4. Trip options */}
-          <fieldset className="rounded-2xl border border-border bg-cream p-4 grid gap-3 sm:grid-cols-2">
-            <legend className="sr-only">Trip options</legend>
-            <ToggleRow
-              id="round-trip"
-              label="Round trip"
-              hint="Quote both legs (return ride included)."
-              checked={state.roundTrip}
-              onChange={(v) => handleField("roundTrip", v)}
-            />
-            <ToggleRow
-              id="meet-greet"
-              label="Meet & greet"
-              hint="Driver waits inside with a sign (+$30)."
-              checked={state.meetAndGreet}
-              onChange={(v) => handleField("meetAndGreet", v)}
-            />
-          </fieldset>
+          {/* 4. Trip type — one way vs round trip (separate from direction).
+              Promoted to a 2-card radio so customers can't miss it: round trip
+              doubles the fare, so this is a load-bearing decision. */}
+          <div>
+            <span className={labelClass}>Trip type <RequiredMark /></span>
+            <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Trip type">
+              {[
+                {
+                  value: false,
+                  title: "One way",
+                  hint: "Just this leg.",
+                  priceLabel: priceSummary.basePrice
+                    ? formatCurrency(state.roundTrip ? priceSummary.basePrice / 2 : priceSummary.basePrice)
+                    : null,
+                },
+                {
+                  value: true,
+                  title: "Round trip",
+                  hint: "Both legs — we return at your scheduled time.",
+                  priceLabel: priceSummary.basePrice
+                    ? formatCurrency(state.roundTrip ? priceSummary.basePrice : priceSummary.basePrice * 2)
+                    : null,
+                  badge: "Save the hassle",
+                },
+              ].map((option) => {
+                const selected = state.roundTrip === option.value;
+                return (
+                  <button
+                    key={String(option.value)}
+                    type="button"
+                    role="radio"
+                    aria-checked={selected}
+                    onClick={() => handleField("roundTrip", option.value)}
+                    className={`relative flex items-start justify-between gap-3 text-left p-4 rounded-2xl border-2 transition cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-cream ${
+                      selected
+                        ? "border-gold bg-gold/5 shadow-sm"
+                        : "border-border bg-white hover:border-ink/40"
+                    }`}
+                  >
+                    <div className="min-w-0">
+                      <span className="block text-sm font-semibold text-ink">{option.title}</span>
+                      <span className="block text-xs text-muted mt-1">{option.hint}</span>
+                    </div>
+                    {option.priceLabel && (
+                      <span
+                        className={`shrink-0 font-display text-base font-semibold tabular-nums ${
+                          selected ? "text-ink" : "text-muted"
+                        }`}
+                      >
+                        {option.priceLabel}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Meet & greet — separate decision, single toggle */}
+          <ToggleRow
+            id="meet-greet"
+            label="Meet & greet"
+            hint="Driver waits inside the terminal with a sign (+$30)."
+            checked={state.meetAndGreet}
+            onChange={(v) => handleField("meetAndGreet", v)}
+          />
 
           {/* 5. Flight info */}
           <div className={fieldGroup}>
@@ -977,7 +1052,11 @@ export default function TransportationBookingWizard() {
 
       <div>
         <span className={labelClass}>Passenger group <RequiredMark /></span>
-        <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-6" role="radiogroup" aria-label="Passenger group">
+        <div
+          className="grid grid-cols-3 sm:grid-cols-3 lg:grid-cols-6 gap-2"
+          role="radiogroup"
+          aria-label="Passenger group"
+        >
           {PASSENGER_GROUPS.map((option, idx) => {
             const selected = state.passengerGroup === option.value;
             return (
@@ -988,14 +1067,18 @@ export default function TransportationBookingWizard() {
                 aria-checked={selected}
                 ref={idx === 0 ? (el) => { firstFieldRef.current = el; } : undefined}
                 onClick={() => handleField("passengerGroup", option.value)}
-                className={`px-3 py-3 rounded-xl border-2 text-sm font-semibold transition cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-cream ${
+                className={`flex flex-col items-center justify-center px-2 py-3 min-h-[64px] rounded-xl border-2 transition cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-cream ${
                   selected
                     ? "border-gold bg-gold/10 text-ink"
                     : "border-border bg-white text-muted hover:border-ink/40"
                 }`}
               >
-                {option.label.replace(" passengers", "")}
-                <span className="block text-[11px] font-normal mt-0.5 text-muted">passengers</span>
+                <span className={`text-sm font-semibold leading-tight ${selected ? "text-ink" : "text-ink/85"}`}>
+                  {option.label.replace(" passengers", "")}
+                </span>
+                <span className="mt-0.5 text-[10px] font-normal leading-tight text-muted">
+                  passengers
+                </span>
               </button>
             );
           })}
@@ -1222,10 +1305,25 @@ export default function TransportationBookingWizard() {
         />
 
         <div className="rounded-2xl border border-border bg-white p-5">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted mb-3">Gratuity</p>
-          <div className="grid gap-2 sm:grid-cols-4" role="radiogroup" aria-label="Gratuity amount">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted mb-3">
+            Gratuity
+          </p>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2" role="radiogroup" aria-label="Gratuity amount">
             {GRATUITY_OPTIONS.map((option) => {
               const selected = state.gratuity === option.value;
+              // Live dollar preview for each tier — much clearer than just "20%".
+              const subtotal =
+                (priceSummary.basePrice ?? 0) + priceSummary.addOns;
+              const previewCents =
+                option.value === "cash"
+                  ? null
+                  : Math.round(subtotal * (Number(option.value) / 100) * 100);
+              const previewLabel =
+                option.value === "cash"
+                  ? "Paid to driver"
+                  : previewCents !== null && subtotal > 0
+                    ? formatCurrency(previewCents / 100)
+                    : null;
               return (
                 <button
                   key={option.value}
@@ -1233,18 +1331,35 @@ export default function TransportationBookingWizard() {
                   role="radio"
                   aria-checked={selected}
                   onClick={() => handleField("gratuity", option.value)}
-                  className={`px-3 py-3 rounded-xl border-2 text-sm font-semibold transition cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-cream ${
+                  className={`relative flex flex-col items-center justify-center px-3 py-3 min-h-[68px] rounded-xl border-2 transition cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-cream ${
                     selected
-                      ? "border-gold bg-gold/10 text-ink"
-                      : "border-border bg-white text-muted hover:border-ink/40"
+                      ? "border-gold bg-gold/10"
+                      : "border-border bg-white hover:border-ink/40"
                   }`}
                 >
-                  {option.label}
+                  <span
+                    className={`text-sm font-semibold ${
+                      selected ? "text-ink" : "text-ink/85"
+                    }`}
+                  >
+                    {option.label}
+                  </span>
+                  {previewLabel && (
+                    <span
+                      className={`mt-1 text-xs tabular-nums ${
+                        selected ? "text-ink/70" : "text-muted"
+                      }`}
+                    >
+                      {previewLabel}
+                    </span>
+                  )}
                 </button>
               );
             })}
           </div>
-          <p className="mt-3 text-xs text-muted">Gratuity is included in your estimated total above.</p>
+          <p className="mt-3 text-xs text-muted">
+            Gratuity is included in your estimated total above (except &ldquo;cash at pickup&rdquo;, which you hand to the driver).
+          </p>
         </div>
       </div>
     </>
@@ -1263,25 +1378,107 @@ export default function TransportationBookingWizard() {
       />
 
       <form onSubmit={handleSubmit} className="space-y-5">
-        <div className="rounded-2xl border border-border bg-white p-6">
-          <div className="flex items-center justify-between gap-4">
-            <div>
+        <div className="rounded-2xl border border-border bg-white p-6 shadow-[0_4px_16px_-6px_rgba(12,11,10,0.08)]">
+          <div className="flex items-start justify-between gap-4 pb-4 border-b border-border">
+            <div className="min-w-0">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted">Service</p>
-              <p className="mt-1 font-display text-xl font-semibold text-ink">
+              <p className="mt-1 font-display text-xl font-semibold text-ink leading-tight">
                 {state.service ? SERVICE_LABELS[state.service] : "—"}
               </p>
             </div>
-            <div className="text-right">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted">Estimated total</p>
-              <p className="mt-1 font-display text-2xl font-semibold text-ink tabular-nums">
-                {priceSummary.total !== null ? formatCurrency(priceSummary.total) : "Quote pending"}
+            <div className="text-right shrink-0">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted">
+                {priceSummary.total !== null ? "Total" : "Estimated total"}
               </p>
+              <AnimatePresence mode="wait" initial={false}>
+                <motion.p
+                  key={priceSummary.total ?? "pending-step6"}
+                  initial={reducedMotion ? { opacity: 1 } : { opacity: 0, y: -4 }}
+                  animate={reducedMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
+                  exit={reducedMotion ? { opacity: 0 } : { opacity: 0, y: 4 }}
+                  transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
+                  className="mt-1 font-display text-2xl font-semibold text-ink tabular-nums"
+                >
+                  {priceSummary.total !== null ? formatCurrency(priceSummary.total) : "Quote pending"}
+                </motion.p>
+              </AnimatePresence>
             </div>
           </div>
+
+          {/* Key trip details — gives the customer a moment of certainty
+              before they leave the page for Stripe. */}
+          <dl className="mt-4 grid gap-3 sm:grid-cols-2 text-sm">
+            <SummaryRow
+              icon={
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
+                  <rect x="3" y="5" width="18" height="16" rx="2" />
+                  <path strokeLinecap="round" d="M3 9h18M8 3v4M16 3v4" />
+                </svg>
+              }
+              label="Pickup"
+              value={
+                state.service === "airport-transfer"
+                  ? formatHumanDateTime(state.flightTime)
+                  : formatHumanDateTime(state.pickupDateTime)
+              }
+            />
+            <SummaryRow
+              icon={
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+              }
+              label="Passengers"
+              value={
+                PASSENGER_GROUPS.find((p) => p.value === state.passengerGroup)?.label ?? "—"
+              }
+            />
+            {priceSummary.routeLabel && (
+              <SummaryRow
+                icon={
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                }
+                label="Route"
+                value={priceSummary.routeLabel}
+                wide
+              />
+            )}
+            <SummaryRow
+              icon={
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M16 12a4 4 0 10-8 0 4 4 0 008 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 14v3m-2 0h4M5 21h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                </svg>
+              }
+              label="Contact"
+              value={`${state.firstName} ${state.lastName} · ${state.email}`}
+              wide
+            />
+          </dl>
+
+          <button
+            type="button"
+            onClick={() => goToStep(5)}
+            className="mt-4 inline-flex items-center gap-1.5 font-sans text-xs font-semibold text-muted hover:text-ink transition-colors"
+          >
+            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.4} aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+            </svg>
+            Edit details
+          </button>
         </div>
 
         {submitStatus === "success" ? (
-          <div className="rounded-2xl border border-green-200 bg-green-50 p-5 text-sm text-green-900" role="status">
+          <motion.div
+            initial={reducedMotion ? { opacity: 0 } : { opacity: 0, y: 8 }}
+            animate={reducedMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
+            transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
+            className="rounded-2xl border border-green-200 bg-green-50 p-5 text-sm text-green-900"
+            role="status"
+          >
             <p className="font-semibold">Quote request received.</p>
             <p className="mt-1 text-green-800/90">
               Thank you, {state.firstName}! We&apos;ll reply shortly to <span className="font-medium">{state.email}</span> with
@@ -1291,27 +1488,56 @@ export default function TransportationBookingWizard() {
               Need to reach us right now? Call{" "}
               <a className="underline" href={SITE_CONTACT.phoneHref}>{SITE_CONTACT.phoneDisplay}</a>.
             </p>
-          </div>
+          </motion.div>
         ) : (
           <>
-            <button
+            <motion.button
               type="submit"
               disabled={submitStatus === "sending"}
+              whileTap={submitStatus === "idle" || submitStatus === "error" ? { scale: 0.98 } : undefined}
+              transition={{ duration: 0.12, ease: "easeOut" }}
               className={`${buttonPrimary} w-full sm:w-auto`}
             >
-              {submitStatus === "sending"
-                ? priceSummary.total !== null
-                  ? "Redirecting to checkout…"
-                  : "Sending…"
-                : priceSummary.total !== null
-                  ? `Continue to secure checkout · ${formatCurrency(priceSummary.total)}`
-                  : "Request a quote"}
-              {submitStatus !== "sending" && (
-                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <path d="M5 12h14M13 5l7 7-7 7" />
-                </svg>
-              )}
-            </button>
+              <AnimatePresence mode="wait" initial={false}>
+                {submitStatus === "sending" ? (
+                  <motion.span
+                    key="sending"
+                    initial={{ opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -4 }}
+                    transition={{ duration: 0.18 }}
+                    className="inline-flex items-center gap-2"
+                  >
+                    <svg
+                      className="w-4 h-4 animate-spin"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      aria-hidden="true"
+                    >
+                      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeOpacity="0.25" strokeWidth="3" />
+                      <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+                    </svg>
+                    {priceSummary.total !== null ? "Redirecting to checkout…" : "Sending…"}
+                  </motion.span>
+                ) : (
+                  <motion.span
+                    key="default"
+                    initial={{ opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -4 }}
+                    transition={{ duration: 0.18 }}
+                    className="inline-flex items-center gap-2"
+                  >
+                    {priceSummary.total !== null
+                      ? `Continue to secure checkout · ${formatCurrency(priceSummary.total)}`
+                      : "Request a quote"}
+                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="M5 12h14M13 5l7 7-7 7" />
+                    </svg>
+                  </motion.span>
+                )}
+              </AnimatePresence>
+            </motion.button>
             {priceSummary.total !== null && (
               <p className="text-xs text-muted leading-relaxed inline-flex items-center gap-1.5">
                 <svg className="w-3.5 h-3.5 text-muted/70" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} aria-hidden="true">
@@ -1321,13 +1547,22 @@ export default function TransportationBookingWizard() {
                 Secure payment by Stripe. Full refund if cancelled at least 24 hours before pickup.
               </p>
             )}
-            {submitStatus === "error" && (
-              <p className="rounded-2xl border border-sunset/20 bg-sunset/10 p-4 text-sm text-ink" role="alert">
-                {error || "Something went wrong. Please try again, or"} email{" "}
-                <a className="underline" href={`mailto:${SITE_CONTACT.email}`}>{SITE_CONTACT.email}</a> or call{" "}
-                <a className="underline" href={SITE_CONTACT.phoneHref}>{SITE_CONTACT.phoneDisplay}</a>.
-              </p>
-            )}
+            <AnimatePresence>
+              {submitStatus === "error" && (
+                <motion.p
+                  initial={reducedMotion ? { opacity: 0 } : { opacity: 0, x: -6 }}
+                  animate={reducedMotion ? { opacity: 1 } : { opacity: 1, x: [0, -6, 6, -4, 4, 0] }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.4, ease: "easeOut" }}
+                  className="rounded-2xl border border-sunset/20 bg-sunset/10 p-4 text-sm text-ink"
+                  role="alert"
+                >
+                  {error || "Something went wrong. Please try again, or"} email{" "}
+                  <a className="underline" href={`mailto:${SITE_CONTACT.email}`}>{SITE_CONTACT.email}</a> or call{" "}
+                  <a className="underline" href={SITE_CONTACT.phoneHref}>{SITE_CONTACT.phoneDisplay}</a>.
+                </motion.p>
+              )}
+            </AnimatePresence>
             <p className="text-xs text-muted leading-relaxed">
               By continuing you agree to TNT Tours&apos; terms. Your card is processed securely by Stripe; we never store
               card details.
@@ -1360,27 +1595,49 @@ export default function TransportationBookingWizard() {
           <div className="rounded-3xl border border-border bg-white shadow-sm p-5 sm:p-8">
           {ProgressBar}
 
-          {error && (
-            <div
-              role="alert"
-              aria-live="polite"
-              className="mb-5 flex items-start gap-3 rounded-xl border border-sunset/30 bg-sunset/10 p-4 text-sm text-ink"
-            >
-              <svg className="w-5 h-5 shrink-0 text-sunset mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} aria-hidden="true">
-                <circle cx="12" cy="12" r="10" />
-                <path d="M12 8v4M12 16h.01" strokeLinecap="round" />
-              </svg>
-              <span>{error}</span>
-            </div>
-          )}
+          <AnimatePresence>
+            {error && (
+              <motion.div
+                key={error}
+                role="alert"
+                aria-live="polite"
+                initial={reducedMotion ? { opacity: 0 } : { opacity: 0, y: -8, x: 0 }}
+                animate={
+                  reducedMotion
+                    ? { opacity: 1 }
+                    : { opacity: 1, y: 0, x: [0, -5, 5, -3, 3, 0] }
+                }
+                exit={{ opacity: 0, y: -4 }}
+                transition={{ duration: 0.45, ease: "easeOut" }}
+                className="mb-5 flex items-start gap-3 rounded-xl border border-sunset/30 bg-sunset/10 p-4 text-sm text-ink"
+              >
+                <svg className="w-5 h-5 shrink-0 text-sunset mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} aria-hidden="true">
+                  <circle cx="12" cy="12" r="10" />
+                  <path d="M12 8v4M12 16h.01" strokeLinecap="round" />
+                </svg>
+                <span>{error}</span>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
-          <div>
-            {step === 1 && Step1}
-            {step === 2 && Step2}
-            {step === 3 && Step3}
-            {step === 4 && Step4}
-            {step === 5 && Step5}
-            {step === 6 && Step6}
+          <div className="relative overflow-hidden">
+            <AnimatePresence mode="wait" custom={stepDirection} initial={false}>
+              <motion.div
+                key={step}
+                custom={stepDirection}
+                initial={reducedMotion ? { opacity: 0 } : { opacity: 0, x: stepDirection * 28 }}
+                animate={reducedMotion ? { opacity: 1 } : { opacity: 1, x: 0 }}
+                exit={reducedMotion ? { opacity: 0 } : { opacity: 0, x: stepDirection * -28 }}
+                transition={{ duration: 0.32, ease: [0.23, 1, 0.32, 1] }}
+              >
+                {step === 1 && Step1}
+                {step === 2 && Step2}
+                {step === 3 && Step3}
+                {step === 4 && Step4}
+                {step === 5 && Step5}
+                {step === 6 && Step6}
+              </motion.div>
+            </AnimatePresence>
           </div>
 
           {/* Desktop / inline navigation (hide on mobile — sticky bottom takes over) */}
@@ -1425,22 +1682,45 @@ export default function TransportationBookingWizard() {
 
       {/* Mobile sticky bottom: total + continue */}
       {step < TOTAL_STEPS && (
-        <div className="sm:hidden fixed bottom-0 inset-x-0 z-40 border-t border-border bg-white/95 backdrop-blur px-4 pt-3 pb-[calc(env(safe-area-inset-bottom)+12px)]">
-          <div className="flex items-center justify-between gap-3 mb-2">
-            <div>
+        <div className="sm:hidden fixed bottom-0 inset-x-0 z-40 border-t border-border bg-white/95 backdrop-blur-md px-4 pt-3 pb-[calc(env(safe-area-inset-bottom)+12px)] shadow-[0_-4px_20px_rgba(12,11,10,0.08)]">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">Estimated total</p>
-              <p className="font-display text-lg font-semibold text-ink tabular-nums">
-                {priceSummary.total !== null ? formatCurrency(priceSummary.total) : "—"}
-              </p>
+              <AnimatePresence mode="wait" initial={false}>
+                <motion.p
+                  key={priceSummary.total ?? "pending-mobile"}
+                  initial={reducedMotion ? { opacity: 1 } : { opacity: 0, y: -3 }}
+                  animate={reducedMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
+                  exit={reducedMotion ? { opacity: 0 } : { opacity: 0, y: 3 }}
+                  transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
+                  className="font-display text-lg font-semibold text-ink tabular-nums truncate"
+                >
+                  {priceSummary.total !== null ? formatCurrency(priceSummary.total) : "—"}
+                </motion.p>
+              </AnimatePresence>
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-2 shrink-0">
               {step > 1 && (
-                <button type="button" onClick={handleBack} className="px-4 py-3 rounded-full border border-border bg-white text-sm font-semibold text-ink min-h-[44px]" aria-label="Back">
-                  ←
+                <button
+                  type="button"
+                  onClick={handleBack}
+                  className="px-4 py-3 rounded-full border border-border bg-white text-sm font-semibold text-ink min-h-[44px] active:scale-[0.96] transition-transform"
+                  aria-label="Go back to previous step"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.4} aria-hidden="true">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                  </svg>
                 </button>
               )}
-              <button type="button" onClick={handleNext} className="px-5 py-3 rounded-full bg-ink text-white text-sm font-semibold min-h-[44px]">
+              <button
+                type="button"
+                onClick={handleNext}
+                className="inline-flex items-center gap-1.5 px-5 py-3 rounded-full bg-ink text-white text-sm font-semibold min-h-[44px] active:scale-[0.96] transition-transform"
+              >
                 {step === 5 ? "Confirm" : "Continue"}
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.6} aria-hidden="true">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                </svg>
               </button>
             </div>
           </div>
@@ -1561,6 +1841,40 @@ function ReviewBlock({ title, rows, onEdit }: ReviewBlockProps) {
           </div>
         ))}
       </dl>
+    </div>
+  );
+}
+
+/**
+ * Compact icon + label/value row used in the final confirmation card.
+ * `wide` makes the row span both columns of the grid.
+ */
+function SummaryRow({
+  icon,
+  label,
+  value,
+  wide,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  wide?: boolean;
+}) {
+  return (
+    <div
+      className={`flex items-start gap-3 ${wide ? "sm:col-span-2" : ""}`}
+    >
+      <span className="mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gold/12 text-gold ring-1 ring-gold/20">
+        {icon}
+      </span>
+      <div className="min-w-0 flex-1">
+        <dt className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted">
+          {label}
+        </dt>
+        <dd className="mt-0.5 font-sans text-sm font-medium text-ink leading-snug break-words">
+          {value || "—"}
+        </dd>
+      </div>
     </div>
   );
 }

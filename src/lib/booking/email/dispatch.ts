@@ -3,6 +3,8 @@ import { db } from "@/lib/booking/db";
 import { bookings, type Booking } from "@/lib/booking/schema";
 import { sendBookingConfirmation } from "./send";
 
+const LOG = "[booking/email/dispatch]";
+
 /**
  * Send the confirmation email and persist the outcome on the booking row.
  *
@@ -20,13 +22,25 @@ import { sendBookingConfirmation } from "./send";
 export async function dispatchConfirmationEmail(
   booking: Booking
 ): Promise<{ ok: true; alreadySent: boolean } | { ok: false; error: string }> {
+  const tag = `${LOG} ${booking.confirmationCode}`;
+
+  console.log(
+    `${tag} dispatchConfirmationEmail called: ` +
+      `status=${booking.status} ` +
+      `confirmationEmailSentAt=${booking.confirmationEmailSentAt ?? "null"} ` +
+      `attempts=${booking.confirmationEmailAttempts ?? 0} ` +
+      `customer=${booking.customerEmail}`
+  );
+
   if (booking.confirmationEmailSentAt) {
+    console.log(`${tag} skipping — email already sent at ${booking.confirmationEmailSentAt.toISOString()}`);
     return { ok: true, alreadySent: true };
   }
 
   try {
     await sendBookingConfirmation(booking);
-    await db
+    console.log(`${tag} send succeeded — stamping confirmationEmailSentAt`);
+    const stampResult = await db
       .update(bookings)
       .set({
         confirmationEmailSentAt: new Date(),
@@ -34,18 +48,30 @@ export async function dispatchConfirmationEmail(
         updatedAt: new Date(),
       })
       .where(eq(bookings.id, booking.id));
+    console.log(`${tag} DB stamp result:`, stampResult);
     return { ok: true, alreadySent: false };
   } catch (err) {
     const message = err instanceof Error ? err.message : "unknown error";
-    console.error(`[email dispatch] confirmation email failed for ${booking.confirmationCode}:`, err);
-    await db
-      .update(bookings)
-      .set({
-        confirmationEmailAttempts: (booking.confirmationEmailAttempts ?? 0) + 1,
-        confirmationEmailLastError: message.slice(0, 500),
-        updatedAt: new Date(),
-      })
-      .where(eq(bookings.id, booking.id));
+    const stack = err instanceof Error ? err.stack : undefined;
+    console.error(`${tag} email FAILED:`, message);
+    if (stack) console.error(`${tag} stack:`, stack);
+    if (err && typeof err === "object") {
+      console.error(`${tag} error object:`, JSON.stringify(err, Object.getOwnPropertyNames(err), 2));
+    }
+
+    try {
+      await db
+        .update(bookings)
+        .set({
+          confirmationEmailAttempts: (booking.confirmationEmailAttempts ?? 0) + 1,
+          confirmationEmailLastError: message.slice(0, 500),
+          updatedAt: new Date(),
+        })
+        .where(eq(bookings.id, booking.id));
+    } catch (dbErr) {
+      console.error(`${tag} failed to persist email error to DB:`, dbErr);
+    }
+
     return { ok: false, error: message };
   }
 }

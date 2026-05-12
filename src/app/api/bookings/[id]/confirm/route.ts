@@ -27,10 +27,17 @@ export async function POST(
   }
 
   const { id } = await context.params;
+  console.log(`[admin/confirm] received request for booking id=${id}`);
   const [booking] = await db.select().from(bookings).where(eq(bookings.id, id)).limit(1);
   if (!booking) {
+    console.warn(`[admin/confirm] booking ${id} not found`);
     return NextResponse.json({ error: "Booking not found" }, { status: 404 });
   }
+  console.log(
+    `[admin/confirm] ${booking.confirmationCode}: status=${booking.status} ` +
+      `customer=${booking.customerEmail} ` +
+      `emailAlreadySent=${booking.confirmationEmailSentAt ? "yes" : "no"}`
+  );
 
   // Stage 1: status update (idempotent).
   let current = booking;
