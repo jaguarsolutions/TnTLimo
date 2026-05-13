@@ -16,6 +16,15 @@ import type { BookableServiceCode } from "./data";
 import { calculateAirportTransferPrice } from "./airportTransfer";
 import { calculatePointToPointPrice } from "./pointToPoint";
 import { calculateHourlyCharterPrice } from "./hourlyCharter";
+import { resolvePlace } from "@/lib/maps/places";
+import { computeDriveDistanceMiles } from "@/lib/maps/routes";
+import { isWithinServiceArea } from "@/lib/geo/service-area";
+import { lookupFixedRoute } from "@/lib/pricing/fixedRoutes";
+import {
+  computeFixedRouteQuote,
+  computeQuote as computeEngineQuote,
+  getVehicle as getEngineVehicle,
+} from "@/lib/pricing/engine";
 
 /* ── Public formatters ────────────────────────────────────────────────── */
 
@@ -50,6 +59,11 @@ export interface PricingInput {
   // point-to-point
   pickupAddress?: string;
   dropoffAddress?: string;
+  /** Google Place IDs — when present, server can compute custom-route quotes. */
+  pickupPlaceId?: string;
+  dropoffPlaceId?: string;
+  /** Engine vehicle id (towncar, suv) — only used for custom point-to-point routes. */
+  vehicleId?: string;
   extraStop?: boolean;
   // hourly-charter
   hours?: number;
@@ -140,4 +154,97 @@ function finalize(subtotalUsd: number, gratuityValue: string): ComputedPrice {
     gratuityCents,
     totalCents: subtotalCents + gratuityCents,
   };
+}
+
+/* ── Async variant: point-to-point with Google-resolved Place IDs ──────── */
+
+/**
+ * Server-side authoritative price computation, with one async escape hatch:
+ * if the input is a point-to-point booking with Place IDs, we route the
+ * computation through the live-quote engine (fixed-route match or Google
+ * Routes API + custom-route engine).
+ *
+ * All other services + non-Place-ID point-to-point delegate to the synchronous
+ * {@link computeBookingPrice}.
+ */
+export async function computeBookingPriceAsync(
+  input: PricingInput
+): Promise<ComputedPrice> {
+  if (input.passengerGroup === "15+") {
+    return { kind: "manual-quote", reason: "Groups over 14 passengers require a custom quote." };
+  }
+
+  // Only point-to-point with Place IDs takes the Google path.
+  if (
+    input.service === "point-to-point" &&
+    input.pickupPlaceId &&
+    input.dropoffPlaceId
+  ) {
+    return computePointToPointFromPlaceIds(input);
+  }
+
+  return computeBookingPrice(input);
+}
+
+async function computePointToPointFromPlaceIds(
+  input: PricingInput
+): Promise<ComputedPrice> {
+  const vehicleId = input.vehicleId ?? "towncar";
+  const vehicle = getEngineVehicle(vehicleId);
+  if (!vehicle) {
+    return { kind: "manual-quote", reason: `Unknown vehicle "${vehicleId}".` };
+  }
+
+  let pickup, dropoff;
+  try {
+    [pickup, dropoff] = await Promise.all([
+      resolvePlace(input.pickupPlaceId!),
+      resolvePlace(input.dropoffPlaceId!),
+    ]);
+  } catch (err) {
+    console.error("[computeBookingPriceAsync] place resolution failed:", err);
+    return { kind: "manual-quote", reason: "Couldn't resolve those addresses with Google." };
+  }
+
+  if (!isWithinServiceArea(pickup.location) || !isWithinServiceArea(dropoff.location)) {
+    return {
+      kind: "manual-quote",
+      reason: "One of the addresses is outside our 50-mile service area.",
+    };
+  }
+
+  const fixed = lookupFixedRoute({
+    pickupPlaceId: pickup.placeId,
+    pickupLocation: pickup.location,
+    dropoffPlaceId: dropoff.placeId,
+    dropoffLocation: dropoff.location,
+  });
+
+  if (fixed) {
+    const q = computeFixedRouteQuote({
+      vehicle,
+      fixedRoutePrice: fixed.price,
+      routeLabel: fixed.label,
+      tripType: input.roundTrip ? "roundtrip" : "oneway",
+      extraStop: input.extraStop ?? false,
+    });
+    return finalize(q.base, input.gratuity);
+  }
+
+  let distanceMiles: number;
+  try {
+    const { miles } = await computeDriveDistanceMiles(pickup.placeId, dropoff.placeId);
+    distanceMiles = miles;
+  } catch (err) {
+    console.error("[computeBookingPriceAsync] Routes API failed:", err);
+    return { kind: "manual-quote", reason: "Google Routes API didn't return a distance." };
+  }
+
+  const q = computeEngineQuote({
+    vehicle,
+    distanceMiles,
+    tripType: input.roundTrip ? "roundtrip" : "oneway",
+    extraStop: input.extraStop ?? false,
+  });
+  return finalize(q.base, input.gratuity);
 }

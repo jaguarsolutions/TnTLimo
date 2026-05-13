@@ -22,4 +22,10 @@ export const SITE_IMAGES = {
   theGroveVintageTruck: publicUrl("/images/site/the-grove-vintage-truck.jpg"),
   walkOfFameOliverStone: publicUrl("/images/site/walk-of-fame-oliver-stone-star.jpg"),
   santaMonicaYachtHarborSign: publicUrl("/images/site/santa-monica-yacht-harbor-sign.jpg"),
+  /** Car-seat showcase — placeholder photos from Pexels/Unsplash (commercial use OK).
+      Replace with photos of TNT's actual seats when available. */
+  carSeatInfant: publicUrl("/images/site/car-seats/infant-seat.jpg"),
+  carSeatBooster: publicUrl("/images/site/car-seats/child-booster.jpg"),
+  carSeatProduct: publicUrl("/images/site/car-seats/seat-product.jpg"),
+  carSeatParentInstalling: publicUrl("/images/site/car-seats/parent-installing.jpg"),
 } as const;

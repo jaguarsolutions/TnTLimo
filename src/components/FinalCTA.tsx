@@ -110,7 +110,7 @@ export default function FinalCTA() {
           >
             {[
               "5-Star on Google & TripAdvisor",
-              "Serving Anaheim, LA & Orange County",
+              "Based in Anaheim · Serving OC & LA",
               "Fast, Friendly Communication",
             ].map((point, i) => (
               <div key={point} className="flex items-center gap-3">

@@ -29,6 +29,7 @@ export default function AirportTransferPage() {
         ]}
         ctaLabel="Book airport transfer"
         ctaHref="/transportation/book?service=airport-transfer"
+        showCarSeatsCallout
       />
       <Footer />
     </>

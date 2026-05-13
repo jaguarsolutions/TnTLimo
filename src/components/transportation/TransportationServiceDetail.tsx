@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
+import FamilyCarSeats from "@/components/FamilyCarSeats";
 
 interface Props {
   title: string;
@@ -10,6 +11,8 @@ interface Props {
   ctaLabel: string;
   ctaHref: string;
   note?: ReactNode;
+  /** Inject the "free car seats" callout below the What-to-expect card. */
+  showCarSeatsCallout?: boolean;
 }
 
 export default function TransportationServiceDetail({
@@ -21,6 +24,7 @@ export default function TransportationServiceDetail({
   ctaLabel,
   ctaHref,
   note,
+  showCarSeatsCallout = false,
 }: Props) {
   return (
     <main className="bg-cream text-ink">
@@ -67,7 +71,7 @@ export default function TransportationServiceDetail({
 
       <section className="py-16 bg-sand">
         <div className="max-w-6xl mx-auto px-5 sm:px-8 lg:px-12 grid gap-10 lg:grid-cols-[1.3fr_0.9fr]">
-          <div>
+          <div className="space-y-6">
             <div className="rounded-[2rem] border border-border bg-white p-10 shadow-[0_4px_16px_-6px_rgba(12,11,10,0.10)]">
               <h2 className="font-display text-3xl font-semibold text-ink">What to expect</h2>
               <p className="mt-5 text-sm text-muted leading-relaxed">{description}</p>
@@ -84,6 +88,7 @@ export default function TransportationServiceDetail({
                 ))}
               </div>
             </div>
+            {showCarSeatsCallout && <FamilyCarSeats variant="callout" />}
           </div>
           <aside className="space-y-6">
             <div className="rounded-[2rem] border border-border bg-white p-8 shadow-[0_4px_16px_-6px_rgba(12,11,10,0.10)]">

@@ -29,6 +29,7 @@ export default function DisneylandTransportationPage() {
         ]}
         ctaLabel="Book Disneyland transportation"
         ctaHref="/transportation/book?service=disneyland-transportation"
+        showCarSeatsCallout
       />
       <Footer />
     </>

@@ -1,0 +1,24 @@
+[
+  {
+    "id": "towncar",
+    "name": "Town Car",
+    "description": "Sedan — ideal for 1–3 passengers and light luggage.",
+    "maxPassengers": 3,
+    "maxLuggage": 3,
+    "baseFare": 50,
+    "perMile": 3.10,
+    "minimumFare": 80,
+    "suvMultiplier": 1.0
+  },
+  {
+    "id": "suv",
+    "name": "SUV",
+    "description": "Premium SUV — best for families, larger groups, or extra luggage.",
+    "maxPassengers": 6,
+    "maxLuggage": 6,
+    "baseFare": 60,
+    "perMile": 3.85,
+    "minimumFare": 110,
+    "suvMultiplier": 1.0
+  }
+]

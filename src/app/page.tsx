@@ -6,6 +6,8 @@ import TransportationServicesSection from "@/components/TransportationServicesSe
 import Services from "@/components/Services";
 import WhyChoose from "@/components/WhyChoose";
 import VehicleComfort from "@/components/VehicleComfort";
+import FamilyCarSeats from "@/components/FamilyCarSeats";
+import { SITE_IMAGES } from "@/lib/siteImages";
 import Testimonials from "@/components/Testimonials";
 import LAHighlights from "@/components/LAHighlights";
 import HowItWorks from "@/components/HowItWorks";
@@ -36,7 +38,20 @@ export default function HomePage() {
         <Services />
         {/* 6. Why choose — combined positioning */}
         <WhyChoose />
-        {/* 7. Vehicle comfort — relevant to both services */}
+        {/* 7. Family-friendly — free car seats showcase. Placed right after
+            Why Choose because family-friendly is one of those bullets, and
+            seeing it as a full visual section right after the abbreviated
+            mention amplifies it. Photos are placeholders from Pexels/Unsplash;
+            swap with real fleet photos when available. */}
+        <FamilyCarSeats
+          photos={[
+            { src: SITE_IMAGES.carSeatInfant, alt: "Infant car seat installed in TNT Tours vehicle" },
+            { src: SITE_IMAGES.carSeatParentInstalling, alt: "Parent securing a baby in the car seat before pickup" },
+            { src: SITE_IMAGES.carSeatProduct, alt: "Forward-facing child seat with safety harness, installed in the rear seat" },
+            { src: SITE_IMAGES.carSeatBooster, alt: "Child smiling in a high-back booster seat during a TNT ride" },
+          ]}
+        />
+        {/* 8. Vehicle comfort — relevant to both services */}
         <VehicleComfort />
         {/* 8. Testimonials */}
         <Testimonials />

@@ -22,7 +22,8 @@ import {
 import { AIRPORTS } from "@/lib/transportationLocations";
 import { SITE_CONTACT } from "@/lib/siteContact";
 import { FORM_SUBJECT_PREFIX } from "@/lib/siteEnv";
-import AddressAutocomplete from "./AddressAutocomplete";
+import { VEHICLES, vehiclesForPassengerCount } from "@/lib/pricing/engine";
+import GoogleAddressAutocomplete from "./GoogleAddressAutocomplete";
 
 const WEB3_KEY = process.env.NEXT_PUBLIC_WEB3FORMS_ACCESS_KEY ?? "";
 
@@ -66,7 +67,16 @@ type WizardState = {
   airline: string;
   flightNumber: string;
   flightTime: string;
+  /** Round-trip only: time of the return-leg flight (departure from local airport). */
+  returnFlightTime: string;
   meetAndGreet: boolean;
+  /** Point-to-point: Google Place IDs (separate from formatted display string). */
+  pickupPlaceId: string;
+  dropoffPlaceId: string;
+  /** Airport transfer: Place ID for the hotel/address (the non-airport side). */
+  otherAddressPlaceId: string;
+  /** Point-to-point: vehicle catalog selection. Defaults to towncar. */
+  vehicleId: string;
   extraStop: boolean;
   extraStopDetails: string;
   pickupDateTime: string;
@@ -94,7 +104,12 @@ const INITIAL_STATE: WizardState = {
   airline: "",
   flightNumber: "",
   flightTime: "",
+  returnFlightTime: "",
   meetAndGreet: false,
+  pickupPlaceId: "",
+  dropoffPlaceId: "",
+  otherAddressPlaceId: "",
+  vehicleId: "towncar",
   extraStop: false,
   extraStopDetails: "",
   pickupDateTime: "",
@@ -167,6 +182,13 @@ function isValidEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
+/** Upper-bound seat count for a PASSENGER_GROUPS value like "1-4" or "11-14". */
+function passengersFromGroup(group: string): number {
+  if (group === "15+") return 15;
+  const match = group.match(/^(\d+)-(\d+)$/);
+  return match ? Number(match[2]) : 1;
+}
+
 function isValidPhone(value: string) {
   // 7+ digits anywhere — keeps validation forgiving for international.
   return value.replace(/\D/g, "").length >= 7;
@@ -218,6 +240,86 @@ export default function TransportationBookingWizard() {
   const stepHeaderRef = useRef<HTMLDivElement | null>(null);
   const firstFieldRef = useRef<HTMLElement | null>(null);
 
+  /* ── Live quote (point-to-point only) ────────────────────────────────
+   *
+   * Fires whenever pickup/dropoff Place IDs, vehicle, or extra-stop change.
+   * Debounced 400ms so rapid edits coalesce into one request.
+   */
+  type LiveQuote = {
+    distanceMiles: number | null;
+    vehicle: { id: string; name: string };
+    matchedFixedRoute: string | null;
+    base: number;
+    gratuity: number;
+    total: number;
+    breakdown: Array<{ label: string; amount: number }>;
+  };
+  type QuoteState =
+    | { kind: "idle" }
+    | { kind: "loading" }
+    | { kind: "ok"; data: LiveQuote }
+    | { kind: "error"; message: string; offending?: "pickup" | "dropoff" | "both" };
+  const [quote, setQuote] = useState<QuoteState>({ kind: "idle" });
+
+  useEffect(() => {
+    if (state.service !== "point-to-point") {
+      setQuote({ kind: "idle" });
+      return;
+    }
+    if (!state.pickupPlaceId || !state.dropoffPlaceId || !state.vehicleId) {
+      setQuote({ kind: "idle" });
+      return;
+    }
+
+    let cancelled = false;
+    setQuote({ kind: "loading" });
+    const handle = window.setTimeout(async () => {
+      try {
+        const res = await fetch("/api/quote", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            pickupPlaceId: state.pickupPlaceId,
+            dropoffPlaceId: state.dropoffPlaceId,
+            vehicleId: state.vehicleId,
+            tripType: "oneway",
+            passengers: passengersFromGroup(state.passengerGroup),
+            addOns: { extraStop: state.extraStop },
+          }),
+        });
+        const data = await res.json();
+        if (cancelled) return;
+        if (!res.ok) {
+          setQuote({
+            kind: "error",
+            message: data.message ?? "Couldn't compute a quote.",
+            offending: data.offending,
+          });
+          return;
+        }
+        setQuote({ kind: "ok", data });
+      } catch (err) {
+        if (cancelled) return;
+        setQuote({
+          kind: "error",
+          message: err instanceof Error ? err.message : "Network error fetching quote.",
+        });
+      }
+    }, 400);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(handle);
+    };
+  }, [
+    state.service,
+    state.pickupPlaceId,
+    state.dropoffPlaceId,
+    state.vehicleId,
+    state.extraStop,
+    state.passengerGroup,
+  ]);
+
   /* Focus management & scroll on step change */
   useEffect(() => {
     if (stepHeaderRef.current) {
@@ -261,6 +363,49 @@ export default function TransportationBookingWizard() {
     }
 
     if (state.service === "point-to-point") {
+      // PRIMARY PATH — live quote from /api/quote (Google-backed). Used as
+      // soon as both Place IDs are picked.
+      if (quote.kind === "ok") {
+        const matched = quote.data.matchedFixedRoute;
+        const distance = quote.data.distanceMiles;
+        const label = matched
+          ? `Fixed route: ${matched.replace(/-/g, " → ")}`
+          : distance != null
+            ? `Custom route · ${distance.toFixed(1)} mi (${quote.data.vehicle.name})`
+            : `Custom route (${quote.data.vehicle.name})`;
+        return {
+          basePrice: quote.data.base,
+          addOns: state.extraStop ? 20 : 0,
+          gratuity: quote.data.gratuity,
+          total: quote.data.total,
+          pending: false,
+          routeLabel: label,
+        };
+      }
+      if (quote.kind === "loading") {
+        return {
+          basePrice: null as number | null,
+          addOns: 0,
+          gratuity: 0,
+          total: null as number | null,
+          pending: true,
+          routeLabel: "Calculating fare…",
+        };
+      }
+      if (quote.kind === "error") {
+        return {
+          basePrice: null as number | null,
+          addOns: 0,
+          gratuity: 0,
+          total: null as number | null,
+          pending: true,
+          routeLabel: null,
+        };
+      }
+
+      // FALLBACK — no Place IDs picked yet, or service just landed on
+      // point-to-point. Use the legacy substring matcher so the four fixed
+      // routes still preview when the user types text directly.
       const pricing = calculatePointToPointPrice(
         state.pickupAddress,
         state.dropoffAddress,
@@ -276,7 +421,7 @@ export default function TransportationBookingWizard() {
         gratuity: gratuityAmount,
         total: pricing.total ? pricing.total + gratuityAmount : null,
         pending: pricing.base === null || state.passengerGroup === "15+",
-        routeLabel: pricing.routeMatch ?? "Custom route — quote follows",
+        routeLabel: pricing.routeMatch ?? "Pick pickup and drop-off above for a quote.",
       };
     }
 
@@ -294,7 +439,7 @@ export default function TransportationBookingWizard() {
       pending: false,
       routeLabel: `${state.hours}-hour charter`,
     };
-  }, [state]);
+  }, [state, quote]);
 
   const handleField = <K extends keyof WizardState>(field: K, value: WizardState[K]) => {
     setState((current) => ({ ...current, [field]: value }));
@@ -317,10 +462,25 @@ export default function TransportationBookingWizard() {
         if (!state.airport || !state.otherAddress || !state.flightTime) {
           return "Please choose an airport, enter the hotel/address, and add the flight time.";
         }
+        if (state.roundTrip && !state.returnFlightTime) {
+          return "For a round trip, please add the return departure time too.";
+        }
       }
       if (state.service === "point-to-point") {
-        if (!state.pickupAddress || !state.dropoffAddress || !state.pickupDateTime) {
-          return "Please add pickup, drop-off, and pickup date/time.";
+        if (!state.pickupPlaceId || !state.dropoffPlaceId) {
+          return "Please pick both a pickup and drop-off address from the suggestions.";
+        }
+        if (!state.pickupDateTime) {
+          return "Please add a pickup date and time.";
+        }
+        if (!state.vehicleId) {
+          return "Please pick a vehicle.";
+        }
+        if (quote.kind === "error") {
+          return quote.message;
+        }
+        if (quote.kind === "loading") {
+          return "Hang on — we're calculating your fare.";
         }
       }
       if (state.service === "hourly-charter") {
@@ -363,20 +523,35 @@ export default function TransportationBookingWizard() {
     if (priceSummary.routeLabel) lines.push(`Route: ${priceSummary.routeLabel}`);
 
     if (state.service === "airport-transfer") {
-      const direction =
-        state.airportDirection === "from-airport" ? "Pickup at airport" : "Drop-off at airport";
-      lines.push(`Direction: ${direction}`);
+      const serviceTypeLabel = state.roundTrip
+        ? "Round trip (airport pickup + drop-off)"
+        : state.airportDirection === "from-airport"
+          ? "Airport pickup (arrival)"
+          : "Airport drop-off (departure)";
+      lines.push(`Service type: ${serviceTypeLabel}`);
       lines.push(`Airport: ${airportDisplayName(state.airport)}`);
       lines.push(
-        state.airportDirection === "from-airport"
-          ? `Drop-off address: ${state.otherAddress}`
-          : `Pickup address: ${state.otherAddress}`,
+        state.roundTrip
+          ? `Hotel / address: ${state.otherAddress}`
+          : state.airportDirection === "from-airport"
+            ? `Drop-off address: ${state.otherAddress}`
+            : `Pickup address: ${state.otherAddress}`,
       );
       lines.push(`Airline: ${state.airline || "Not provided"}`);
       lines.push(`Flight #: ${state.flightNumber || "Not provided"}`);
-      lines.push(`Flight time: ${formatHumanDateTime(state.flightTime)}`);
-      lines.push(`Round trip: ${state.roundTrip ? "Yes" : "No"}`);
-      lines.push(`Meet & greet: ${state.meetAndGreet ? "Yes" : "No"}`);
+      lines.push(
+        state.roundTrip
+          ? `Arrival flight time: ${formatHumanDateTime(state.flightTime)}`
+          : state.airportDirection === "from-airport"
+            ? `Arrival time: ${formatHumanDateTime(state.flightTime)}`
+            : `Departure time: ${formatHumanDateTime(state.flightTime)}`,
+      );
+      if (state.roundTrip) {
+        lines.push(`Return departure time: ${formatHumanDateTime(state.returnFlightTime)}`);
+      }
+      if (state.airportDirection === "from-airport" || state.roundTrip) {
+        lines.push(`Meet & greet: ${state.meetAndGreet ? "Yes (+$30)" : "No"}`);
+      }
     }
     if (state.service === "point-to-point") {
       lines.push(`Pickup: ${state.pickupAddress}`);
@@ -640,14 +815,17 @@ export default function TransportationBookingWizard() {
         </AnimatePresence>
       </div>
 
-      {priceSummary.pending && (
+      {/* Only show the "custom quote" message when the booking actually
+          needs a manual quote — i.e. 15+ passengers. Generic "no quote yet"
+          is communicated by the `Calculating…` routeLabel instead. */}
+      {priceSummary.pending && state.passengerGroup === "15+" && (
         <p className="mt-3 rounded-xl border border-sunset/20 bg-sunset/10 px-3 py-2 text-xs text-ink">
-          Custom or large group — we’ll confirm the final quote within hours.
+          Custom or large group — we&apos;ll reply with a multi-vehicle quote within hours.
         </p>
       )}
 
       <p className="mt-4 text-xs text-muted leading-relaxed">
-        No payment yet. We confirm your reservation by phone/email and bill at pickup or via invoice.
+        Payment is securely processed by Stripe at booking. Full refund if you cancel at least 24 hours before pickup.
       </p>
     </div>
   );
@@ -724,270 +902,477 @@ export default function TransportationBookingWizard() {
         subtitle="The fields change with the service you picked. Required fields are marked with an asterisk."
       />
 
-      {state.service === "airport-transfer" && (
-        <div className="space-y-6">
-          {/* 1. Direction */}
-          <div>
-            <span className={labelClass}>Which way are you going? <RequiredMark /></span>
-            <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Airport trip direction">
-              {[
-                {
-                  value: "from-airport" as const,
-                  title: "Pick me up at the airport",
-                  hint: "Arriving — drop me at hotel / address",
-                },
-                {
-                  value: "to-airport" as const,
-                  title: "Drop me at the airport",
-                  hint: "Departing — pick me up at hotel / address",
-                },
-              ].map((option, idx) => {
-                const selected = state.airportDirection === option.value;
-                return (
-                  <button
-                    key={option.value}
-                    type="button"
-                    role="radio"
-                    aria-checked={selected}
-                    ref={idx === 0 ? (el) => { firstFieldRef.current = el; } : undefined}
-                    onClick={() => handleField("airportDirection", option.value)}
-                    className={`text-left p-4 rounded-2xl border-2 transition cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-cream ${
-                      selected
-                        ? "border-gold bg-gold/5"
-                        : "border-border bg-white hover:border-ink/40"
-                    }`}
-                  >
-                    <span className="block text-sm font-semibold text-ink">{option.title}</span>
-                    <span className="block text-xs text-muted mt-1">{option.hint}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+      {state.service === "airport-transfer" && (() => {
+        // Derived "trip type" — collapses (airportDirection, roundTrip) into a
+        // single mental model the customer picks at the top. Maps back to the
+        // underlying state fields so pricing/server validation are unchanged.
+        type TripType = "pickup" | "dropoff" | "round-trip";
+        const tripType: TripType = state.roundTrip
+          ? "round-trip"
+          : state.airportDirection === "from-airport"
+            ? "pickup"
+            : "dropoff";
+        const setTripType = (next: TripType) => {
+          if (next === "pickup") {
+            setState((s) => ({ ...s, airportDirection: "from-airport", roundTrip: false }));
+          } else if (next === "dropoff") {
+            setState((s) => ({ ...s, airportDirection: "to-airport", roundTrip: false }));
+          } else {
+            // Round trip — direction is "the first leg arrives", which is
+            // typical for travellers visiting the area. Pricing treats both
+            // legs the same.
+            setState((s) => ({ ...s, airportDirection: "from-airport", roundTrip: true }));
+          }
+          setError("");
+        };
 
-          {/* 2. Airport */}
-          <div>
-            <label htmlFor="airport" className={labelClass}>Airport <RequiredMark /></label>
-            <select
-              id="airport"
-              value={state.airport}
-              onChange={(e) => handleField("airport", e.target.value)}
-              className={inputBase}
-            >
-              {AIRPORT_OPTIONS.map((code) => (
-                <option key={code} value={code}>{airportDisplayName(code)}</option>
-              ))}
-            </select>
-          </div>
+        const tripOptions: Array<{
+          value: TripType;
+          title: string;
+          hint: string;
+          icon: React.ReactNode;
+          priceLabel: string | null;
+        }> = [
+          {
+            value: "pickup",
+            title: "Airport Pickup",
+            hint: "We meet you at the airport on arrival.",
+            icon: (
+              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M21 16v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1L15 22v-1.5L13 19v-5.5z" />
+              </svg>
+            ),
+            priceLabel: priceSummary.basePrice && !state.roundTrip
+              ? formatCurrency(priceSummary.basePrice)
+              : priceSummary.basePrice && state.roundTrip
+                ? formatCurrency(priceSummary.basePrice / 2)
+                : null,
+          },
+          {
+            value: "dropoff",
+            title: "Airport Drop-off",
+            hint: "We pick you up and take you to the airport.",
+            icon: (
+              <svg className="w-5 h-5 -scale-y-100" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M21 16v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1L15 22v-1.5L13 19v-5.5z" />
+              </svg>
+            ),
+            priceLabel: priceSummary.basePrice && !state.roundTrip
+              ? formatCurrency(priceSummary.basePrice)
+              : priceSummary.basePrice && state.roundTrip
+                ? formatCurrency(priceSummary.basePrice / 2)
+                : null,
+          },
+          {
+            value: "round-trip",
+            title: "Round Trip",
+            hint: "Both legs — arrival pickup AND return drop-off.",
+            icon: (
+              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M3 12a9 9 0 0 1 15-6.7L21 8" />
+                <path d="M21 3v5h-5" />
+                <path d="M21 12a9 9 0 0 1-15 6.7L3 16" />
+                <path d="M3 21v-5h5" />
+              </svg>
+            ),
+            priceLabel: priceSummary.basePrice
+              ? state.roundTrip
+                ? formatCurrency(priceSummary.basePrice)
+                : formatCurrency(priceSummary.basePrice * 2)
+              : null,
+          },
+        ];
 
-          {/* 3. The non-airport address */}
-          <AddressAutocomplete
-            id="airport-other-address"
-            label={state.airportDirection === "from-airport" ? "Drop-off address" : "Pickup address"}
-            value={state.otherAddress}
-            onChange={(v) => handleField("otherAddress", v)}
-            placeholder="Hotel, resort, or street address (e.g. Disney's Grand Californian)"
-            required
-            excludeCategories={["airport"]}
-          />
+        // Field-label adaptation by trip type
+        const addressLabel =
+          tripType === "round-trip"
+            ? "Your hotel or address"
+            : tripType === "pickup"
+              ? "Where are we taking you?"
+              : "Where are we picking you up?";
+        const addressPlaceholder =
+          tripType === "round-trip"
+            ? "Hotel for your whole stay (e.g. Disney's Grand Californian)"
+            : "Hotel, resort, or street address";
+        const flightTimeLabel =
+          tripType === "round-trip"
+            ? "Arrival flight time"
+            : tripType === "pickup"
+              ? "Flight arrival time"
+              : "Flight departure time";
+        const flightTimeHint =
+          tripType === "round-trip"
+            ? "When you arrive — we track delays automatically."
+            : tripType === "pickup"
+              ? "We track flight delays automatically and adjust pickup."
+              : "We'll plan pickup so you arrive comfortably before departure.";
 
-          {/* 4. Trip type — one way vs round trip (separate from direction).
-              Promoted to a 2-card radio so customers can't miss it: round trip
-              doubles the fare, so this is a load-bearing decision. */}
-          <div>
-            <span className={labelClass}>Trip type <RequiredMark /></span>
-            <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Trip type">
-              {[
-                {
-                  value: false,
-                  title: "One way",
-                  hint: "Just this leg.",
-                  priceLabel: priceSummary.basePrice
-                    ? formatCurrency(state.roundTrip ? priceSummary.basePrice / 2 : priceSummary.basePrice)
-                    : null,
-                },
-                {
-                  value: true,
-                  title: "Round trip",
-                  hint: "Both legs — we return at your scheduled time.",
-                  priceLabel: priceSummary.basePrice
-                    ? formatCurrency(state.roundTrip ? priceSummary.basePrice : priceSummary.basePrice * 2)
-                    : null,
-                  badge: "Save the hassle",
-                },
-              ].map((option) => {
-                const selected = state.roundTrip === option.value;
-                return (
-                  <button
-                    key={String(option.value)}
-                    type="button"
-                    role="radio"
-                    aria-checked={selected}
-                    onClick={() => handleField("roundTrip", option.value)}
-                    className={`relative flex items-start justify-between gap-3 text-left p-4 rounded-2xl border-2 transition cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-cream ${
-                      selected
-                        ? "border-gold bg-gold/5 shadow-sm"
-                        : "border-border bg-white hover:border-ink/40"
-                    }`}
-                  >
-                    <div className="min-w-0">
-                      <span className="block text-sm font-semibold text-ink">{option.title}</span>
-                      <span className="block text-xs text-muted mt-1">{option.hint}</span>
-                    </div>
-                    {option.priceLabel && (
+        return (
+          <div className="space-y-6">
+            {/* 1. Trip type — one decision at the top */}
+            <div>
+              <span className={labelClass}>What do you need? <RequiredMark /></span>
+              <div className="grid gap-2 sm:grid-cols-3" role="radiogroup" aria-label="Airport service type">
+                {tripOptions.map((option, idx) => {
+                  const selected = tripType === option.value;
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      role="radio"
+                      aria-checked={selected}
+                      ref={idx === 0 ? (el) => { firstFieldRef.current = el; } : undefined}
+                      onClick={() => setTripType(option.value)}
+                      className={`relative flex flex-col items-start gap-3 text-left p-4 rounded-2xl border-2 transition cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-cream ${
+                        selected
+                          ? "border-gold bg-gold/5 shadow-sm"
+                          : "border-border bg-white hover:border-ink/40"
+                      }`}
+                    >
                       <span
-                        className={`shrink-0 font-display text-base font-semibold tabular-nums ${
-                          selected ? "text-ink" : "text-muted"
+                        className={`inline-flex h-9 w-9 items-center justify-center rounded-xl transition-colors ${
+                          selected ? "bg-gold text-ink" : "bg-cream text-ink/70"
                         }`}
                       >
-                        {option.priceLabel}
+                        {option.icon}
                       </span>
-                    )}
-                  </button>
-                );
-              })}
+                      <div className="min-w-0">
+                        <span className="block text-sm font-semibold text-ink">{option.title}</span>
+                        <span className="block text-xs text-muted mt-0.5 leading-snug">{option.hint}</span>
+                      </div>
+                      {option.priceLabel && (
+                        <span
+                          className={`mt-1 font-display text-sm font-semibold tabular-nums ${
+                            selected ? "text-ink" : "text-muted"
+                          }`}
+                        >
+                          {option.priceLabel}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-          </div>
 
-          {/* Meet & greet — separate decision, single toggle */}
-          <ToggleRow
-            id="meet-greet"
-            label="Meet & greet"
-            hint="Driver waits inside the terminal with a sign (+$30)."
-            checked={state.meetAndGreet}
-            onChange={(v) => handleField("meetAndGreet", v)}
-          />
-
-          {/* 5. Flight info */}
-          <div className={fieldGroup}>
+            {/* 2. Airport */}
             <div>
-              <label htmlFor="airline" className={labelClass}>Airline</label>
-              <input
-                id="airline"
-                value={state.airline}
-                onChange={(e) => handleField("airline", e.target.value)}
-                placeholder="e.g. United, Delta, Southwest"
+              <label htmlFor="airport" className={labelClass}>Airport <RequiredMark /></label>
+              <select
+                id="airport"
+                value={state.airport}
+                onChange={(e) => handleField("airport", e.target.value)}
                 className={inputBase}
-              />
+              >
+                {AIRPORT_OPTIONS.map((code) => (
+                  <option key={code} value={code}>{airportDisplayName(code)}</option>
+                ))}
+              </select>
             </div>
-            <div>
-              <label htmlFor="flight-number" className={labelClass}>Flight number</label>
-              <input
-                id="flight-number"
-                value={state.flightNumber}
-                onChange={(e) => handleField("flightNumber", e.target.value)}
-                placeholder="e.g. AA1234"
-                inputMode="text"
-                className={inputBase}
-              />
+
+            {/* 3. Hotel / non-airport address — Google Places autocomplete
+                so customers pick a real, validated address. Place ID is
+                captured for future driver-routing use. */}
+            <GoogleAddressAutocomplete
+              id="airport-other-address"
+              label={addressLabel}
+              value={state.otherAddress}
+              placeId={state.otherAddressPlaceId}
+              placeholder={addressPlaceholder}
+              required
+              onChange={(picked) => {
+                setState((s) => ({
+                  ...s,
+                  otherAddress: picked.formattedAddress || picked.name || "",
+                  otherAddressPlaceId: picked.placeId,
+                }));
+              }}
+            />
+
+            {/* 4. Flight info — airline + flight number (optional helpful info) */}
+            <div className={fieldGroup}>
+              <div>
+                <label htmlFor="airline" className={labelClass}>
+                  Airline{tripType === "round-trip" && <span className="font-normal text-muted ml-1">(arrival)</span>}
+                </label>
+                <input
+                  id="airline"
+                  value={state.airline}
+                  onChange={(e) => handleField("airline", e.target.value)}
+                  placeholder="e.g. United, Delta, Southwest"
+                  className={inputBase}
+                />
+              </div>
+              <div>
+                <label htmlFor="flight-number" className={labelClass}>
+                  Flight number{tripType === "round-trip" && <span className="font-normal text-muted ml-1">(arrival)</span>}
+                </label>
+                <input
+                  id="flight-number"
+                  value={state.flightNumber}
+                  onChange={(e) => handleField("flightNumber", e.target.value)}
+                  placeholder="e.g. AA1234"
+                  inputMode="text"
+                  className={inputBase}
+                />
+              </div>
             </div>
-          </div>
 
-          <div>
-            <label htmlFor="flight-time" className={labelClass}>
-              {state.airportDirection === "from-airport" ? "Flight arrival time" : "Flight departure time"} <RequiredMark />
-            </label>
-            <input
-              id="flight-time"
-              type="datetime-local"
-              min={minDateTime}
-              value={state.flightTime}
-              onChange={(e) => handleField("flightTime", e.target.value)}
-              className={inputBase}
-            />
-            <p className="mt-2 text-xs text-muted">
-              {state.airportDirection === "from-airport"
-                ? "We track flight delays automatically and adjust pickup."
-                : "We’ll plan pickup with airport timing in mind."}
-            </p>
-          </div>
-        </div>
-      )}
-
-      {state.service === "point-to-point" && (
-        <div className="space-y-6">
-          <div className="grid gap-4">
-            <AddressAutocomplete
-              id="pickup-address-p2p"
-              label="Pickup address"
-              value={state.pickupAddress}
-              onChange={(v) => handleField("pickupAddress", v)}
-              placeholder="Hotel, resort, or street address"
-              required
-              inputRef={(el) => { firstFieldRef.current = el; }}
-            />
-            <AddressAutocomplete
-              id="dropoff-address-p2p"
-              label="Drop-off address"
-              value={state.dropoffAddress}
-              onChange={(v) => handleField("dropoffAddress", v)}
-              placeholder="Airport, attraction, or venue"
-              required
-            />
-          </div>
-
-          <div className={fieldGroup}>
+            {/* 5. Primary flight time */}
             <div>
-              <label htmlFor="pickup-time-p2p" className={labelClass}>Pickup date and time <RequiredMark /></label>
+              <label htmlFor="flight-time" className={labelClass}>
+                {flightTimeLabel} <RequiredMark />
+              </label>
               <input
-                id="pickup-time-p2p"
+                id="flight-time"
                 type="datetime-local"
                 min={minDateTime}
-                value={state.pickupDateTime}
-                onChange={(e) => handleField("pickupDateTime", e.target.value)}
+                value={state.flightTime}
+                onChange={(e) => handleField("flightTime", e.target.value)}
                 className={inputBase}
               />
+              <p className="mt-2 text-xs text-muted">{flightTimeHint}</p>
             </div>
-            <ToggleRow
-              id="extra-stop"
-              label="Add an extra stop"
-              hint="Quick errand or pickup along the way (+$20)."
-              checked={state.extraStop}
-              onChange={(v) => handleField("extraStop", v)}
-            />
-          </div>
 
-          {state.extraStop && (
+            {/* 6. Return flight time — round trip only */}
+            {tripType === "round-trip" && (
+              <div>
+                <label htmlFor="return-flight-time" className={labelClass}>
+                  Return departure time <RequiredMark />
+                </label>
+                <input
+                  id="return-flight-time"
+                  type="datetime-local"
+                  min={state.flightTime || minDateTime}
+                  value={state.returnFlightTime}
+                  onChange={(e) => handleField("returnFlightTime", e.target.value)}
+                  className={inputBase}
+                />
+                <p className="mt-2 text-xs text-muted">
+                  When you fly home — we&apos;ll pick you up and take you back to the airport.
+                  Add your return flight number in the notes step if you&apos;d like.
+                </p>
+              </div>
+            )}
+
+            {/* 7. Meet & greet — only relevant when we're picking you up at the airport */}
+            {(tripType === "pickup" || tripType === "round-trip") && (
+              <ToggleRow
+                id="meet-greet"
+                label="Meet & greet"
+                hint="Driver waits inside the terminal with a sign (+$30). Recommended for international arrivals and families."
+                checked={state.meetAndGreet}
+                onChange={(v) => handleField("meetAndGreet", v)}
+              />
+            )}
+          </div>
+        );
+      })()}
+
+      {state.service === "point-to-point" && (() => {
+        const passengerCount = passengersFromGroup(state.passengerGroup);
+        const eligibleVehicles = vehiclesForPassengerCount(passengerCount);
+        const eligibleIds = new Set(eligibleVehicles.map((v) => v.id));
+        return (
+          <div className="space-y-6">
+            {/* How many passengers — surfaced on Step 2 because it directly
+                affects the live quote and which vehicles are eligible. Mirrors
+                the same state.passengerGroup that Step 3 also edits. */}
             <div>
-              <label htmlFor="extra-stop-details" className={labelClass}>Extra stop details</label>
-              <input
-                id="extra-stop-details"
-                value={state.extraStopDetails}
-                onChange={(e) => handleField("extraStopDetails", e.target.value)}
-                placeholder="Address or instructions"
-                className={inputBase}
+              <span className={labelClass}>How many passengers? <RequiredMark /></span>
+              <div
+                className="grid grid-cols-3 sm:grid-cols-3 lg:grid-cols-6 gap-2"
+                role="radiogroup"
+                aria-label="Passenger group"
+              >
+                {PASSENGER_GROUPS.map((option) => {
+                  const selected = state.passengerGroup === option.value;
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      role="radio"
+                      aria-checked={selected}
+                      onClick={() => handleField("passengerGroup", option.value)}
+                      className={`flex flex-col items-center justify-center px-2 py-3 min-h-[60px] rounded-xl border-2 transition cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-cream ${
+                        selected
+                          ? "border-gold bg-gold/10 text-ink"
+                          : "border-border bg-white text-muted hover:border-ink/40"
+                      }`}
+                    >
+                      <span className={`text-sm font-semibold leading-tight ${selected ? "text-ink" : "text-ink/85"}`}>
+                        {option.label.replace(" passengers", "")}
+                      </span>
+                      <span className="mt-0.5 text-[10px] font-normal leading-tight text-muted">
+                        passengers
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+              {state.passengerGroup === "15+" && (
+                <p className="mt-2 text-xs text-sunset" role="alert">
+                  Groups of 15+ are quoted manually — finish the form and we&apos;ll reply with a multi-vehicle quote.
+                </p>
+              )}
+            </div>
+
+            <div className="grid gap-4">
+              <div>
+                <GoogleAddressAutocomplete
+                  id="pickup-address-p2p"
+                  label="Pickup address"
+                  value={state.pickupAddress}
+                  placeId={state.pickupPlaceId}
+                  required
+                  placeholder="Start typing — we'll only show locations within 50 miles of Anaheim."
+                  inputRef={(el) => { firstFieldRef.current = el; }}
+                  onChange={(picked) => {
+                    setState((s) => ({
+                      ...s,
+                      pickupAddress: picked.formattedAddress || picked.name || "",
+                      pickupPlaceId: picked.placeId,
+                    }));
+                  }}
+                />
+                {quote.kind === "error" && quote.offending === "pickup" && (
+                  <p className="mt-2 text-xs text-red-700" role="alert">{quote.message}</p>
+                )}
+              </div>
+              <div>
+                <GoogleAddressAutocomplete
+                  id="dropoff-address-p2p"
+                  label="Drop-off address"
+                  value={state.dropoffAddress}
+                  placeId={state.dropoffPlaceId}
+                  required
+                  placeholder="Airport, attraction, or venue."
+                  onChange={(picked) => {
+                    setState((s) => ({
+                      ...s,
+                      dropoffAddress: picked.formattedAddress || picked.name || "",
+                      dropoffPlaceId: picked.placeId,
+                    }));
+                  }}
+                />
+                {quote.kind === "error" && (quote.offending === "dropoff" || quote.offending === "both") && (
+                  <p className="mt-2 text-xs text-red-700" role="alert">{quote.message}</p>
+                )}
+              </div>
+            </div>
+
+            {/* Vehicle picker — config-driven (config/vehicles.json). Options
+                below current passenger count are hidden. */}
+            <div>
+              <span className={labelClass}>Vehicle <RequiredMark /></span>
+              <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Vehicle type">
+                {VEHICLES.map((v) => {
+                  const eligible = eligibleIds.has(v.id);
+                  if (!eligible) return null;
+                  const selected = state.vehicleId === v.id;
+                  return (
+                    <button
+                      key={v.id}
+                      type="button"
+                      role="radio"
+                      aria-checked={selected}
+                      onClick={() => handleField("vehicleId", v.id)}
+                      className={`flex items-start justify-between gap-3 text-left p-4 rounded-2xl border-2 transition cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-cream ${
+                        selected ? "border-gold bg-gold/5" : "border-border bg-white hover:border-ink/40"
+                      }`}
+                    >
+                      <div className="min-w-0">
+                        <span className="block text-sm font-semibold text-ink">{v.name}</span>
+                        <span className="block text-xs text-muted mt-1">
+                          Up to {v.maxPassengers} passengers · {v.maxLuggage} bags
+                        </span>
+                        {v.description && (
+                          <span className="block text-xs text-muted/85 mt-1 leading-snug">{v.description}</span>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+              {eligibleVehicles.length === 0 && (
+                <p className="mt-2 text-xs text-sunset" role="alert">
+                  No vehicle in our catalog seats {passengerCount} passengers. Please call us for a multi-vehicle setup.
+                </p>
+              )}
+            </div>
+
+            <div className={fieldGroup}>
+              <div>
+                <label htmlFor="pickup-time-p2p" className={labelClass}>Pickup date and time <RequiredMark /></label>
+                <input
+                  id="pickup-time-p2p"
+                  type="datetime-local"
+                  min={minDateTime}
+                  value={state.pickupDateTime}
+                  onChange={(e) => handleField("pickupDateTime", e.target.value)}
+                  className={inputBase}
+                />
+              </div>
+              <ToggleRow
+                id="extra-stop"
+                label="Add an extra stop"
+                hint="Quick errand or pickup along the way (+$20)."
+                checked={state.extraStop}
+                onChange={(v) => handleField("extraStop", v)}
               />
             </div>
-          )}
 
-          <div className="rounded-2xl border border-border bg-cream/70 p-5">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted">Sample fixed routes</p>
-            <ul className="mt-3 grid gap-1.5 text-sm text-ink sm:grid-cols-2">
-              {Object.entries(POINT_TO_POINT_FIXED_ROUTES).map(([route, price]) => (
-                <li key={route} className="flex justify-between gap-3">
-                  <span>{route}</span>
-                  <span className="font-medium tabular-nums">{formatCurrency(price)}</span>
-                </li>
-              ))}
-            </ul>
-            <p className="mt-3 text-xs text-muted">
-              Outside these routes? Type the addresses and we’ll quote within hours.
-            </p>
+            {state.extraStop && (
+              <div>
+                <label htmlFor="extra-stop-details" className={labelClass}>Extra stop details</label>
+                <input
+                  id="extra-stop-details"
+                  value={state.extraStopDetails}
+                  onChange={(e) => handleField("extraStopDetails", e.target.value)}
+                  placeholder="Address or instructions"
+                  className={inputBase}
+                />
+              </div>
+            )}
+
+            <div className="rounded-2xl border border-border bg-cream/70 p-5">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted">Sample fixed routes</p>
+              <ul className="mt-3 grid gap-1.5 text-sm text-ink sm:grid-cols-2">
+                {Object.entries(POINT_TO_POINT_FIXED_ROUTES).map(([route, price]) => (
+                  <li key={route} className="flex justify-between gap-3">
+                    <span>{route}</span>
+                    <span className="font-medium tabular-nums">{formatCurrency(price)}</span>
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-3 text-xs text-muted">
+                Other routes get an instant quote when you pick pickup + drop-off above.
+              </p>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {state.service === "hourly-charter" && (
         <div className="space-y-6">
           <div className={fieldGroup}>
-            <AddressAutocomplete
+            {/* Pickup address — Google Places autocomplete so customers
+                pick a real venue/hotel. Place ID is captured for driver routing. */}
+            <GoogleAddressAutocomplete
               id="pickup-address-charter"
               label="Pickup address"
               value={state.pickupAddress}
-              onChange={(v) => handleField("pickupAddress", v)}
+              placeId={state.pickupPlaceId}
               placeholder="Hotel, event venue, or address"
               required
               inputRef={(el) => { firstFieldRef.current = el; }}
+              onChange={(picked) => {
+                setState((s) => ({
+                  ...s,
+                  pickupAddress: picked.formattedAddress || picked.name || "",
+                  pickupPlaceId: picked.placeId,
+                }));
+              }}
             />
             <div>
               <label htmlFor="pickup-time-charter" className={labelClass}>Pickup date and time <RequiredMark /></label>
@@ -1235,21 +1620,37 @@ export default function TransportationBookingWizard() {
             onEdit={() => goToStep(2)}
             rows={[
               {
-                label: "Direction",
-                value: state.airportDirection === "from-airport" ? "Pickup at airport" : "Drop-off at airport",
+                label: "Service",
+                value: state.roundTrip
+                  ? "Round trip (pickup + drop-off)"
+                  : state.airportDirection === "from-airport"
+                    ? "Airport pickup (arrival)"
+                    : "Airport drop-off (departure)",
               },
               { label: "Airport", value: airportDisplayName(state.airport) },
               {
-                label: state.airportDirection === "from-airport" ? "Drop-off" : "Pickup",
+                label: state.roundTrip
+                  ? "Hotel / address"
+                  : state.airportDirection === "from-airport"
+                    ? "Drop-off"
+                    : "Pickup",
                 value: state.otherAddress || "—",
               },
               { label: "Flight", value: `${state.airline || "—"} · ${state.flightNumber || "—"}` },
               {
-                label: state.airportDirection === "from-airport" ? "Arrival" : "Departure",
+                label: state.roundTrip
+                  ? "Arrival"
+                  : state.airportDirection === "from-airport"
+                    ? "Arrival"
+                    : "Departure",
                 value: formatHumanDateTime(state.flightTime),
               },
-              { label: "Round trip", value: state.roundTrip ? "Yes" : "No" },
-              { label: "Meet & greet", value: state.meetAndGreet ? "Yes" : "No" },
+              ...(state.roundTrip
+                ? [{ label: "Return departure", value: formatHumanDateTime(state.returnFlightTime) }]
+                : []),
+              ...(state.airportDirection === "from-airport" || state.roundTrip
+                ? [{ label: "Meet & greet", value: state.meetAndGreet ? "Yes (+$30)" : "No" }]
+                : []),
             ]}
           />
         )}

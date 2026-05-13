@@ -104,15 +104,16 @@ export default function Hero() {
 
       {/* ─── Hero Content with Parallax ───────────────────────── */}
       <motion.div
-        className="relative z-10 max-w-5xl mx-auto px-5 sm:px-8 text-center"
+        className="relative z-10 max-w-5xl mx-auto px-5 sm:px-8 text-center pt-20 md:pt-24"
         style={reducedMotion ? {} : { y: contentY }}
       >
-        {/* Brand mark */}
+        {/* Brand mark — `mt-2` keeps a small buffer below the fixed header
+            even on short viewports. */}
         <motion.div
           initial={{ opacity: 0, y: reducedMotion ? 0 : 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: dur, ease: "easeOut" }}
-          className="mb-8 flex justify-center"
+          className="mt-2 mb-6 flex justify-center"
         >
           <Logo
             size="hero"

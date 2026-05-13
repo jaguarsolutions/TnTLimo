@@ -12,6 +12,7 @@ export { generateConfirmationCode } from "./bookingCode";
 export { isWithinFreeCancelWindow, hoursUntilPickup } from "./cancellation";
 export { signManageToken, verifyManageToken } from "./manageToken";
 export { getStripe, withTenantStripe } from "./stripe";
+export { ensurePaymentIntent } from "./stripeSync";
 export { sendBookingConfirmation, sendBookingCancellation } from "./email/send";
 export { dispatchConfirmationEmail } from "./email/dispatch";
 export * from "./pricing";

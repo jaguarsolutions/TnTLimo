@@ -8,8 +8,10 @@ type LogoSize = "hero" | "footer";
  * fills the same vertical band the previous landscape logo occupied.
  */
 const sizeClass: Record<LogoSize, string> = {
+  // Slightly tighter than before so the logo always clears the fixed
+  // 64–80px header on short viewports.
   hero:
-    "w-[min(78vw,16rem)] sm:w-[min(18rem,80vw)] md:w-[20rem] max-h-[min(34vh,16rem)] object-contain mx-auto",
+    "w-[min(64vw,12rem)] sm:w-[min(15rem,72vw)] md:w-[17rem] max-h-[min(28vh,14rem)] object-contain mx-auto",
   footer: "h-16 md:h-20 w-auto object-contain object-left",
 };
 
@@ -26,7 +28,7 @@ export default function Logo({ size, className = "", priority = false }: LogoPro
       alt="TNT Tours & Transportation — Anaheim's premier tours and transportation service"
       width={1254}
       height={1254}
-      sizes={size === "hero" ? "(max-width: 640px) 78vw, 320px" : "256px"}
+      sizes={size === "hero" ? "(max-width: 640px) 64vw, 272px" : "256px"}
       priority={priority}
       className={`${sizeClass[size]} ${className}`.trim()}
     />

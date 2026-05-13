@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/lib/booking/db";
 import { bookings } from "@/lib/booking/schema";
 import { getStripe, withTenantStripe } from "@/lib/booking/stripe";
+import { ensurePaymentIntent } from "@/lib/booking/stripeSync";
 import { sendBookingCancellation } from "@/lib/booking/email/send";
 
 export const runtime = "nodejs";
@@ -42,10 +43,14 @@ export async function POST(
     return NextResponse.json({ ok: true, alreadyCancelled: true });
   }
 
-  // We only refund bookings that were actually paid (i.e. have a payment intent).
-  // For bookings still in `pending`, there's nothing to refund — we just mark
-  // them cancelled.
-  if (!booking.stripePaymentIntentId) {
+  // Backfill the payment intent from the Stripe session if the webhook
+  // never recorded it — otherwise we'd mark the booking cancelled without
+  // refunding a real payment.
+  const synced = await ensurePaymentIntent(booking);
+
+  // If still no payment intent after backfill, this booking was never paid
+  // (e.g. admin-confirmed without a real Stripe session). Just mark cancelled.
+  if (!synced.stripePaymentIntentId) {
     const [updated] = await db
       .update(bookings)
       .set({
@@ -64,7 +69,7 @@ export async function POST(
   try {
     const refund = await stripe.refunds.create(
       {
-        payment_intent: booking.stripePaymentIntentId,
+        payment_intent: synced.stripePaymentIntentId,
         reason: "requested_by_customer",
         metadata: {
           bookingId: booking.id,

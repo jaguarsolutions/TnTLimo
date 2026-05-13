@@ -18,7 +18,7 @@ export default function ServiceCTA({
   subtext = "Check availability for your preferred date and let us take care of the rest.",
   primaryCTA = "Book Now",
   secondaryCTA = "Ask a Question",
-  trustPoints = ["5-Star on Google & TripAdvisor", "Serving Anaheim, LA & Orange County", "Fast, Friendly Communication"],
+  trustPoints = ["5-Star on Google & TripAdvisor", "Based in Anaheim · Serving OC & LA", "Fast, Friendly Communication"],
 }: Props) {
   return (
     <section id="book" className="relative py-24 overflow-hidden bg-charcoal" aria-label="Book this experience">

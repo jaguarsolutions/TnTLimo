@@ -1,0 +1,64 @@
+{
+  "anchors": {
+    "anaheim-disneyland": {
+      "label": "Anaheim / Disneyland Resort",
+      "center": { "lat": 33.8121, "lng": -117.9190 },
+      "matchRadiusMeters": 4000,
+      "placeIds": []
+    },
+    "lax": {
+      "label": "LAX — Los Angeles International Airport",
+      "center": { "lat": 33.9416, "lng": -118.4085 },
+      "matchRadiusMeters": 2000,
+      "placeIds": []
+    },
+    "sna": {
+      "label": "SNA — John Wayne Airport",
+      "center": { "lat": 33.6757, "lng": -117.8682 },
+      "matchRadiusMeters": 1500,
+      "placeIds": []
+    },
+    "universal-studios": {
+      "label": "Universal Studios Hollywood",
+      "center": { "lat": 34.1381, "lng": -118.3534 },
+      "matchRadiusMeters": 1500,
+      "placeIds": []
+    },
+    "downtown-la": {
+      "label": "Downtown Los Angeles",
+      "center": { "lat": 34.0522, "lng": -118.2437 },
+      "matchRadiusMeters": 3500,
+      "placeIds": []
+    }
+  },
+  "routes": [
+    {
+      "id": "anaheim-lax",
+      "label": "Anaheim → LAX",
+      "from": "anaheim-disneyland",
+      "to": "lax",
+      "price": 225
+    },
+    {
+      "id": "anaheim-sna",
+      "label": "Anaheim → SNA",
+      "from": "anaheim-disneyland",
+      "to": "sna",
+      "price": 95
+    },
+    {
+      "id": "anaheim-universal",
+      "label": "Anaheim → Universal Studios",
+      "from": "anaheim-disneyland",
+      "to": "universal-studios",
+      "price": 120
+    },
+    {
+      "id": "anaheim-downtown-la",
+      "label": "Anaheim → Downtown LA",
+      "from": "anaheim-disneyland",
+      "to": "downtown-la",
+      "price": 150
+    }
+  ]
+}

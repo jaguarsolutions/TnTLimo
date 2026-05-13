@@ -7,7 +7,7 @@ import { getStripe, withTenantStripe } from "@/lib/booking/stripe";
 import {
   BOOKABLE_SERVICE_CODES,
   SERVICE_LABELS,
-  computeBookingPrice,
+  computeBookingPriceAsync,
   type BookableServiceCode,
   type PricingInput,
 } from "@/lib/booking/pricing";
@@ -38,6 +38,9 @@ interface CreateBookingPayload {
     roundTrip?: boolean;
     pickupAddress?: string;
     dropoffAddress?: string;
+    pickupPlaceId?: string;
+    dropoffPlaceId?: string;
+    vehicleId?: string;
     extraStop?: boolean;
     hours?: number;
   };
@@ -121,11 +124,27 @@ async function handleCreate(request: Request, diagnosticId: string) {
     roundTrip: Boolean(payload.roundTrip),
     pickupAddress: typeof payload.pickupAddress === "string" ? payload.pickupAddress : undefined,
     dropoffAddress: typeof payload.dropoffAddress === "string" ? payload.dropoffAddress : undefined,
+    pickupPlaceId:
+      typeof (payload as Record<string, unknown>).pickupPlaceId === "string"
+        ? ((payload as Record<string, unknown>).pickupPlaceId as string)
+        : undefined,
+    dropoffPlaceId:
+      typeof (payload as Record<string, unknown>).dropoffPlaceId === "string"
+        ? ((payload as Record<string, unknown>).dropoffPlaceId as string)
+        : undefined,
+    vehicleId:
+      typeof (payload as Record<string, unknown>).vehicleId === "string"
+        ? ((payload as Record<string, unknown>).vehicleId as string)
+        : undefined,
     extraStop: Boolean(payload.extraStop),
     hours: typeof payload.hours === "number" ? payload.hours : undefined,
   };
 
-  const priced = computeBookingPrice(pricingInput);
+  // Async variant — when point-to-point inputs include Place IDs + vehicleId,
+  // the server pulls live Google data to authoritatively price the booking
+  // (matches what `/api/quote` shows the customer). Falls back to the sync
+  // path for everything else.
+  const priced = await computeBookingPriceAsync(pricingInput);
   if (priced.kind === "manual-quote") {
     return NextResponse.json(
       { error: `This booking needs a custom quote — ${priced.reason}` },

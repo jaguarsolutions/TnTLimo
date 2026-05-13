@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/lib/booking/db";
 import { bookings } from "@/lib/booking/schema";
 import { dispatchConfirmationEmail } from "@/lib/booking/email/dispatch";
+import { ensurePaymentIntent } from "@/lib/booking/stripeSync";
 
 export const runtime = "nodejs";
 
@@ -53,7 +54,12 @@ export async function POST(
     current = updated;
   }
 
-  // Stage 2: email (also idempotent, but failure is reported to the operator
+  // Stage 2: backfill the Stripe payment intent if the webhook hasn't already.
+  // This makes the customer-facing cancel page work after an admin manual
+  // confirm — without it, cancellation bails with "Payment not found."
+  current = await ensurePaymentIntent(current);
+
+  // Stage 3: email (also idempotent, but failure is reported to the operator
   // so they can see exactly what's broken — usually a Resend domain issue).
   const result = await dispatchConfirmationEmail(current);
   if (!result.ok) {

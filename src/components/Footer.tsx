@@ -160,7 +160,7 @@ export default function Footer() {
                   <path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                 </svg>
                 <span className="font-sans text-sm text-white/60">
-                  Serving Anaheim, Los Angeles<br />& Orange County, CA
+                  Based in Anaheim, CA<br />Serving Orange County &amp; Los Angeles
                 </span>
               </li>
               <li className="flex items-center gap-3">
@@ -212,7 +212,7 @@ export default function Footer() {
           <p className="font-sans text-xs text-white/30 text-center sm:text-left">
             © {new Date().getFullYear()} TNT Tours. All rights reserved.
             <span className="mx-2">·</span>
-            Serving Los Angeles, Anaheim & Orange County
+            Based in Anaheim · Serving OC &amp; LA
           </p>
           <div className="flex gap-4">
             <Link href="#" className="font-sans text-xs text-white/30 hover:text-white/60 transition-colors cursor-pointer">

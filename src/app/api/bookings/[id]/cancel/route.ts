@@ -4,6 +4,7 @@ import { db } from "@/lib/booking/db";
 import { bookings } from "@/lib/booking/schema";
 import { verifyManageToken } from "@/lib/booking/manageToken";
 import { getStripe, withTenantStripe } from "@/lib/booking/stripe";
+import { ensurePaymentIntent } from "@/lib/booking/stripeSync";
 import { isWithinFreeCancelWindow } from "@/lib/booking/cancellation";
 import { sendBookingCancellation } from "@/lib/booking/email/send";
 
@@ -56,7 +57,11 @@ export async function POST(
     );
   }
 
-  if (!booking.stripePaymentIntentId) {
+  // If the webhook never recorded the payment intent (admin manually confirmed,
+  // or webhook delivery was delayed), backfill it from the checkout session now.
+  const synced = await ensurePaymentIntent(booking);
+
+  if (!synced.stripePaymentIntentId) {
     return NextResponse.json(
       { error: "Payment not found on this booking. Please contact support." },
       { status: 500 }
@@ -68,7 +73,7 @@ export async function POST(
   try {
     const refund = await stripe.refunds.create(
       {
-        payment_intent: booking.stripePaymentIntentId,
+        payment_intent: synced.stripePaymentIntentId,
         reason: "requested_by_customer",
         metadata: {
           bookingId: booking.id,

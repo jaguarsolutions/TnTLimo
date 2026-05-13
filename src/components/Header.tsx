@@ -531,7 +531,7 @@ export default function Header({ solid = false }: HeaderProps) {
               <div className="mt-auto pt-6">
                 <hr className="border-border mb-4" />
                 <p className="font-sans text-sm text-muted">
-                  Anaheim · Los Angeles · Orange County
+                  Based in Anaheim · Serving Orange County &amp; Los Angeles
                 </p>
                 <p className="font-sans text-sm text-gold mt-1">
                   5.0 ★ Google &amp; TripAdvisor
