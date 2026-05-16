@@ -9,9 +9,9 @@ import {
   EXTRA_STOP_FEE,
 } from "./engine";
 
-function towncar() {
-  const v = getVehicle("towncar");
-  if (!v) throw new Error("towncar not configured");
+function sedan() {
+  const v = getVehicle("sedan");
+  if (!v) throw new Error("sedan not configured");
   return v;
 }
 function suv() {
@@ -21,9 +21,9 @@ function suv() {
 }
 
 describe("vehicle catalog", () => {
-  it("loads at least Town Car and SUV", () => {
+  it("loads at least Sedan and SUV", () => {
     expect(VEHICLES.length).toBeGreaterThanOrEqual(2);
-    expect(getVehicle("towncar")).toBeTruthy();
+    expect(getVehicle("sedan")).toBeTruthy();
     expect(getVehicle("suv")).toBeTruthy();
   });
 
@@ -33,15 +33,15 @@ describe("vehicle catalog", () => {
 });
 
 describe("vehiclesForPassengerCount", () => {
-  it("includes Town Car for 1–3 passengers", () => {
+  it("includes Sedan for 1–4 passengers", () => {
     const ids = vehiclesForPassengerCount(2).map((v) => v.id);
-    expect(ids).toContain("towncar");
+    expect(ids).toContain("sedan");
     expect(ids).toContain("suv");
   });
 
-  it("hides Town Car when 5 passengers requested (spec verification step #6)", () => {
+  it("hides Sedan when 5 passengers requested", () => {
     const ids = vehiclesForPassengerCount(5).map((v) => v.id);
-    expect(ids).not.toContain("towncar");
+    expect(ids).not.toContain("sedan");
     expect(ids).toContain("suv");
   });
 
@@ -51,21 +51,21 @@ describe("vehiclesForPassengerCount", () => {
   });
 });
 
-describe("computeQuote — verification step #1: Town Car 26 mi one-way", () => {
+describe("computeQuote — verification step #1: Sedan 26 mi one-way", () => {
   const q = computeQuote({
-    vehicle: towncar(),
+    vehicle: sedan(),
     distanceMiles: 26,
     tripType: "oneway",
   });
 
-  it("base = $131 (rounded from $50 + $3.10×26 = $130.60)", () => {
-    expect(q.base).toBe(131);
+  it("base = $180 (rounded from $50 + $5.00×26 = $180)", () => {
+    expect(q.base).toBe(180);
   });
-  it("gratuity = $26 (20% of $130.60 ≈ $26.12 → rounds to $26)", () => {
-    expect(q.gratuity).toBe(26);
+  it("gratuity = $36 (20% of $180 = $36)", () => {
+    expect(q.gratuity).toBe(36);
   });
-  it("total = base + gratuity = $157", () => {
-    expect(q.total).toBe(157);
+  it("total = base + gratuity = $216", () => {
+    expect(q.total).toBe(216);
   });
 });
 
@@ -76,30 +76,30 @@ describe("computeQuote — verification step #2: SUV 26 mi one-way", () => {
     tripType: "oneway",
   });
 
-  it("base = $160 (rounded from $60 + $3.85×26 = $160.10)", () => {
-    expect(q.base).toBe(160);
+  it("base = $211 (rounded from $55 + $6.00×26 = $211)", () => {
+    expect(q.base).toBe(211);
   });
-  it("gratuity = $32 (20% of $160.10 ≈ $32.02)", () => {
-    expect(q.gratuity).toBe(32);
+  it("gratuity = $42 (20% of $211 = $42.2 → rounds to $42)", () => {
+    expect(q.gratuity).toBe(42);
   });
-  it("total = $192", () => {
-    expect(q.total).toBe(192);
+  it("total = $253", () => {
+    expect(q.total).toBe(253);
   });
 });
 
 describe("computeQuote — verification step #3: minimum fare clamp", () => {
-  it("Town Car 4 mi → $80 minimum (not $50 + $12.40 = $62.40)", () => {
+  it("Sedan 4 mi → $95 minimum (not $50 + $20 = $70)", () => {
     const q = computeQuote({
-      vehicle: towncar(),
+      vehicle: sedan(),
       distanceMiles: 4,
       tripType: "oneway",
     });
-    expect(q.base).toBe(80);
+    expect(q.base).toBe(95);
   });
 
   it("breakdown shows 'Minimum fare' line when clamp engages", () => {
     const q = computeQuote({
-      vehicle: towncar(),
+      vehicle: sedan(),
       distanceMiles: 4,
       tripType: "oneway",
     });
@@ -108,7 +108,7 @@ describe("computeQuote — verification step #3: minimum fare clamp", () => {
 
   it("breakdown shows Base + Mileage when clamp does NOT engage", () => {
     const q = computeQuote({
-      vehicle: towncar(),
+      vehicle: sedan(),
       distanceMiles: 26,
       tripType: "oneway",
     });
@@ -118,28 +118,28 @@ describe("computeQuote — verification step #3: minimum fare clamp", () => {
 });
 
 describe("computeQuote — verification step #4: round-trip multiplier", () => {
-  it("Town Car 26 mi round-trip = one-way × 1.9 = $248.14 → $248 base", () => {
+  it("Sedan 26 mi round-trip = one-way × 1.9 = $342 base", () => {
     const q = computeQuote({
-      vehicle: towncar(),
+      vehicle: sedan(),
       distanceMiles: 26,
       tripType: "roundtrip",
     });
-    // one-way exact = $130.60; round = $130.60 * 1.9 = $248.14
-    expect(q.oneWayFareExact).toBeCloseTo(130.6, 2);
-    expect(q.base).toBe(248);
+    // one-way exact = $180; round = $180 * 1.9 = $342
+    expect(q.oneWayFareExact).toBeCloseTo(180, 2);
+    expect(q.base).toBe(342);
     expect(ROUND_TRIP_MULTIPLIER).toBe(1.9);
   });
 });
 
 describe("computeQuote — verification step #5: extra-stop adds $20 before gratuity", () => {
   const without = computeQuote({
-    vehicle: towncar(),
+    vehicle: sedan(),
     distanceMiles: 26,
     tripType: "oneway",
     extraStop: false,
   });
   const withStop = computeQuote({
-    vehicle: towncar(),
+    vehicle: sedan(),
     distanceMiles: 26,
     tripType: "oneway",
     extraStop: true,
@@ -162,17 +162,17 @@ describe("computeQuote — verification step #5: extra-stop adds $20 before grat
 
 describe("computeQuote — guards", () => {
   it("throws on negative distance", () => {
-    expect(() => computeQuote({ vehicle: towncar(), distanceMiles: -1, tripType: "oneway" })).toThrow();
+    expect(() => computeQuote({ vehicle: sedan(), distanceMiles: -1, tripType: "oneway" })).toThrow();
   });
   it("throws on non-finite distance", () => {
-    expect(() => computeQuote({ vehicle: towncar(), distanceMiles: Number.NaN, tripType: "oneway" })).toThrow();
+    expect(() => computeQuote({ vehicle: sedan(), distanceMiles: Number.NaN, tripType: "oneway" })).toThrow();
   });
 });
 
 describe("computeFixedRouteQuote", () => {
   it("Anaheim → LAX (published $225) one-way = base $225, gratuity $45, total $270", () => {
     const q = computeFixedRouteQuote({
-      vehicle: towncar(),
+      vehicle: sedan(),
       fixedRoutePrice: 225,
       routeLabel: "Anaheim → LAX",
       tripType: "oneway",
@@ -184,7 +184,7 @@ describe("computeFixedRouteQuote", () => {
 
   it("doesn't call the engine — fixed price stays fixed even for short distances", () => {
     const q = computeFixedRouteQuote({
-      vehicle: towncar(),
+      vehicle: sedan(),
       fixedRoutePrice: 95,
       routeLabel: "Anaheim → SNA",
       tripType: "oneway",
@@ -194,7 +194,7 @@ describe("computeFixedRouteQuote", () => {
 
   it("round-trip applies 1.9× to the fixed price", () => {
     const q = computeFixedRouteQuote({
-      vehicle: towncar(),
+      vehicle: sedan(),
       fixedRoutePrice: 100,
       routeLabel: "Test",
       tripType: "roundtrip",
@@ -204,7 +204,7 @@ describe("computeFixedRouteQuote", () => {
 
   it("extra stop adds $20", () => {
     const q = computeFixedRouteQuote({
-      vehicle: towncar(),
+      vehicle: sedan(),
       fixedRoutePrice: 100,
       routeLabel: "Test",
       tripType: "oneway",

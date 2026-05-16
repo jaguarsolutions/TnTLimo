@@ -17,8 +17,7 @@ export type BookableServiceCode = (typeof BOOKABLE_SERVICE_CODES)[number];
 export const PASSENGER_GROUPS = [
   { label: "1-4 passengers", value: "1-4" },
   { label: "5-6 passengers", value: "5-6" },
-  { label: "7-8 passengers", value: "7-8" },
-  { label: "9-10 passengers", value: "9-10" },
+  { label: "7-10 passengers", value: "7-10" },
   { label: "11-14 passengers", value: "11-14" },
   { label: "More than 14 passengers", value: "15+" },
 ] as const;
@@ -41,19 +40,18 @@ export const GRATUITY_OPTIONS = [
 export const AIRPORT_OPTIONS = ["SNA", "LAX", "LGB", "BUR", "ONT", "SAN"] as const;
 
 export const AIRPORT_PRICING = {
-  SNA: { "1-4": 85, "5-6": 110, "7-8": 145, "9-10": 165, "11-14": 185 },
-  LAX: { "1-4": 175, "5-6": 195, "7-8": 220, "9-10": 260, "11-14": 320 },
-  LGB: { "1-4": 95, "5-6": 120, "7-8": 140, "9-10": 180, "11-14": 220 },
-  BUR: { "1-4": 185, "5-6": 210, "7-8": 245, "9-10": 285, "11-14": 325 },
-  ONT: { "1-4": 185, "5-6": 195, "7-8": 235, "9-10": 295, "11-14": 335 },
-  SAN: { "1-4": 375, "5-6": 425, "7-8": 495, "9-10": 550, "11-14": 595 },
+  SNA: { "1-4": 85, "5-6": 110, "7-10": 165, "11-14": 185 },
+  LAX: { "1-4": 175, "5-6": 195, "7-10": 260, "11-14": 320 },
+  LGB: { "1-4": 95, "5-6": 120, "7-10": 180, "11-14": 220 },
+  BUR: { "1-4": 185, "5-6": 210, "7-10": 285, "11-14": 325 },
+  ONT: { "1-4": 185, "5-6": 195, "7-10": 295, "11-14": 335 },
+  SAN: { "1-4": 375, "5-6": 425, "7-10": 550, "11-14": 595 },
 } as const;
 
 export const HOURLY_RATES = {
   "1-4": 95,
   "5-6": 115,
-  "7-8": 135,
-  "9-10": 155,
+  "7-10": 155,
   "11-14": 175,
 } as const;
 

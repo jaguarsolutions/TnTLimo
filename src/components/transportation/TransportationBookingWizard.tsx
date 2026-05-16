@@ -320,6 +320,16 @@ export default function TransportationBookingWizard() {
     state.passengerGroup,
   ]);
 
+  useEffect(() => {
+    if (state.service !== "point-to-point") return;
+    const passengerCount = passengersFromGroup(state.passengerGroup);
+    const eligibleVehicles = vehiclesForPassengerCount(passengerCount);
+    if (eligibleVehicles.length === 0) return;
+    if (!eligibleVehicles.some((v) => v.id === state.vehicleId)) {
+      setState((current) => ({ ...current, vehicleId: eligibleVehicles[0].id }));
+    }
+  }, [state.service, state.passengerGroup, state.vehicleId]);
+
   /* Focus management & scroll on step change */
   useEffect(() => {
     if (stepHeaderRef.current) {
@@ -1215,6 +1225,39 @@ export default function TransportationBookingWizard() {
                   Groups of 15+ are quoted manually — finish the form and we&apos;ll reply with a multi-vehicle quote.
                 </p>
               )}
+            </div>
+
+            <div className="rounded-3xl border border-border bg-white p-6 shadow-sm">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted">Point-to-point pricing</p>
+                  <h3 className="mt-2 text-lg font-semibold text-ink">Private black-car rides with clear rates</h3>
+                </div>
+                <span className="inline-flex items-center rounded-full bg-gold/15 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-gold">
+                  Minimum $95 one-way
+                </span>
+              </div>
+              <p className="mt-3 text-sm text-muted">
+                Choose the right vehicle for your group. All rides include a private driver, comfortable black vehicles, and free car seats on request.
+              </p>
+              <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                <div className="rounded-2xl border border-border bg-sand p-4">
+                  <p className="text-sm font-semibold text-ink">Sedan</p>
+                  <p className="mt-2 text-sm text-muted">1-4 passengers · $5/mile · $95 minimum</p>
+                </div>
+                <div className="rounded-2xl border border-border bg-sand p-4">
+                  <p className="text-sm font-semibold text-ink">SUV</p>
+                  <p className="mt-2 text-sm text-muted">5-6 passengers · $6/mile · $95 minimum</p>
+                </div>
+                <div className="rounded-2xl border border-border bg-sand p-4">
+                  <p className="text-sm font-semibold text-ink">Van</p>
+                  <p className="mt-2 text-sm text-muted">7-10 passengers · $8/mile · $95 minimum</p>
+                </div>
+                <div className="rounded-2xl border border-border bg-sand p-4">
+                  <p className="text-sm font-semibold text-ink">Sprinter</p>
+                  <p className="mt-2 text-sm text-muted">11-14 passengers · $10/mile · $95 minimum</p>
+                </div>
+              </div>
             </div>
 
             <div className="grid gap-4">

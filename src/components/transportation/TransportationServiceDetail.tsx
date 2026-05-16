@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import FamilyCarSeats from "@/components/FamilyCarSeats";
@@ -29,7 +30,7 @@ export default function TransportationServiceDetail({
   return (
     <main className="bg-cream text-ink">
       <section className="relative overflow-hidden pb-16 pt-36 sm:pt-44">
-        <img src={image} alt="" aria-hidden="true" className="absolute inset-0 h-full w-full object-cover object-center" />
+        <Image src={image} alt={imageAlt} fill className="object-cover object-center" />
         <div
           className="absolute inset-0"
           style={{

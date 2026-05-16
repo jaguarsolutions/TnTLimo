@@ -55,7 +55,7 @@ export const TRANSPORTATION_SERVICES = [
     title: "Point-to-Point Transportation",
     description:
       "Private transportation between hotels, attractions, airports, restaurants, event venues, and other destinations across Anaheim and Los Angeles.",
-    highlight: "One-way convenience with a friendly local driver.",
+    highlight: "One-way convenience with a friendly local driver and free child seats on request.",
     image: SITE_IMAGES.griffithObservatoryDay,
     imageAlt: "Point-to-point transportation in Los Angeles",
     href: "/transportation/point-to-point",

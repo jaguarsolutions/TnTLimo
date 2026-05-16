@@ -24,11 +24,12 @@ export default function PointToPointPage() {
         highlights={[
           "Fixed route pricing examples for Anaheim to LAX, SNA, Universal Studios, and Downtown LA.",
           "Optional extra stop keeps your trip flexible.",
-          "Simple booking for airport transfers, meetings, and attractions.",
+          "All rides include private black vehicles and free child seats on request.",
           "Passenger groups from 1 to 14 supported with quick quotes.",
         ]}
         ctaLabel="Book point-to-point"
         ctaHref="/transportation/book?service=point-to-point"
+        showCarSeatsCallout
       />
       <Footer />
     </>

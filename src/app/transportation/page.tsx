@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
@@ -13,12 +14,9 @@ export default function TransportationPage() {
       <main className="bg-cream text-ink">
         <section className="relative overflow-hidden pt-36 pb-20 sm:pt-44">
           {/* Photo background — extends behind the fixed header */}
-          <img
-            src={SITE_IMAGES.santaMonicaPalms}
-            alt=""
-            aria-hidden="true"
-            className="absolute inset-0 h-full w-full object-cover object-center"
-          />
+          <div className="absolute inset-0">
+            <Image src={SITE_IMAGES.santaMonicaPalms} alt="Anaheim palm-lined street" fill className="object-cover" />
+          </div>
           {/* Cinematic overlay matched to homepage hero */}
           <div
             className="absolute inset-0"
@@ -42,10 +40,10 @@ export default function TransportationPage() {
                 Transportation services
               </span>
               <h1 className="mt-6 max-w-3xl font-display text-4xl md:text-5xl font-semibold leading-tight">
-                Anaheim transportation made easy for airport travelers, families, and convention groups.
+                Get there stress-free in Anaheim and beyond.
               </h1>
               <p className="mt-6 max-w-2xl text-lg leading-relaxed text-white/80">
-                Modern private transfers, point-to-point rides, and hourly charter service crafted to fit the same warm, premium TNT Tours experience visitors already trust.
+                Private black-car transportation with simple pricing, free child seats on request, and vehicles sized for every group from 1 to 14 guests.
               </p>
               <div className="mt-10 flex flex-col gap-4 sm:flex-row">
                 <Link
@@ -136,6 +134,64 @@ export default function TransportationPage() {
                 <li>Personal support from an experienced local transportation team.</li>
               </ul>
             </article>
+          </div>
+        </section>
+
+        <section className="py-20 bg-white">
+          <div className="max-w-6xl mx-auto px-5 sm:px-8 lg:px-12">
+            <div className="text-center mb-12">
+              <span className="inline-flex items-center gap-2.5 mb-4">
+                <hr className="gold-rule" aria-hidden="true" />
+                <span className="font-sans text-xs font-semibold tracking-[0.18em] text-gold uppercase">Fleet</span>
+                <hr className="gold-rule" aria-hidden="true" />
+              </span>
+              <h2 className="font-display text-4xl font-semibold text-ink">Black-car vehicle types for every group size</h2>
+              <p className="mt-4 text-sm text-muted max-w-2xl mx-auto">
+                From luxury sedans to executive sprinters, choose a private ride that matches your party. All vehicles are premium, all-black, and available with free car seats on request.
+              </p>
+            </div>
+            <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
+              <article className="rounded-[2rem] border border-border bg-sand overflow-hidden">
+                <div className="relative aspect-[4/3] overflow-hidden">
+                  <Image src={SITE_IMAGES.blackSedan} alt="Black sedan" fill className="object-cover" />
+                </div>
+                <div className="p-6">
+                  <h3 className="font-display text-xl font-semibold text-ink">Sedan</h3>
+                  <p className="mt-2 text-sm text-muted">1-4 passengers · $5/mile · $95 minimum</p>
+                  <p className="mt-4 text-sm text-ink">Smooth, private rides for couples, small families, and airport transfers.</p>
+                </div>
+              </article>
+              <article className="rounded-[2rem] border border-border bg-sand overflow-hidden">
+                <div className="relative aspect-[4/3] overflow-hidden">
+                  <Image src={SITE_IMAGES.blackSuv} alt="Black SUV" fill className="object-cover" />
+                </div>
+                <div className="p-6">
+                  <h3 className="font-display text-xl font-semibold text-ink">SUV</h3>
+                  <p className="mt-2 text-sm text-muted">5-6 passengers · $6/mile · $95 minimum</p>
+                  <p className="mt-4 text-sm text-ink">Premium family and group rides with extra room for luggage and comfort.</p>
+                </div>
+              </article>
+              <article className="rounded-[2rem] border border-border bg-sand overflow-hidden">
+                <div className="relative aspect-[4/3] overflow-hidden">
+                  <Image src={SITE_IMAGES.blackVan} alt="Black van" fill className="object-cover" />
+                </div>
+                <div className="p-6">
+                  <h3 className="font-display text-xl font-semibold text-ink">Van</h3>
+                  <p className="mt-2 text-sm text-muted">7-10 passengers · $8/mile · $95 minimum</p>
+                  <p className="mt-4 text-sm text-ink">Spacious private transporting for larger families, groups, and event teams.</p>
+                </div>
+              </article>
+              <article className="rounded-[2rem] border border-border bg-sand overflow-hidden">
+                <div className="relative aspect-[4/3] overflow-hidden">
+                  <Image src={SITE_IMAGES.blackSprinter} alt="Black sprinter van" fill className="object-cover" />
+                </div>
+                <div className="p-6">
+                  <h3 className="font-display text-xl font-semibold text-ink">Sprinter</h3>
+                  <p className="mt-2 text-sm text-muted">11-14 passengers · $10/mile · $95 minimum</p>
+                  <p className="mt-4 text-sm text-ink">Executive group transportation with plenty of space and a private driver.</p>
+                </div>
+              </article>
+            </div>
           </div>
         </section>
 

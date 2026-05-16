@@ -1,24 +1,46 @@
 [
   {
-    "id": "towncar",
-    "name": "Town Car",
-    "description": "Sedan — ideal for 1–3 passengers and light luggage.",
-    "maxPassengers": 3,
+    "id": "sedan",
+    "name": "Sedan",
+    "description": "Black luxury sedan — 1–4 passengers, perfect for couples and small families.",
+    "maxPassengers": 4,
     "maxLuggage": 3,
     "baseFare": 50,
-    "perMile": 3.10,
-    "minimumFare": 80,
+    "perMile": 5,
+    "minimumFare": 95,
     "suvMultiplier": 1.0
   },
   {
     "id": "suv",
     "name": "SUV",
-    "description": "Premium SUV — best for families, larger groups, or extra luggage.",
+    "description": "Premium black SUV — 5–6 passengers with extra luggage room.",
     "maxPassengers": 6,
     "maxLuggage": 6,
-    "baseFare": 60,
-    "perMile": 3.85,
-    "minimumFare": 110,
+    "baseFare": 55,
+    "perMile": 6,
+    "minimumFare": 95,
+    "suvMultiplier": 1.0
+  },
+  {
+    "id": "van",
+    "name": "Van",
+    "description": "Spacious black van — 7–10 passengers and luggage for family groups.",
+    "maxPassengers": 10,
+    "maxLuggage": 9,
+    "baseFare": 70,
+    "perMile": 8,
+    "minimumFare": 95,
+    "suvMultiplier": 1.0
+  },
+  {
+    "id": "sprinter",
+    "name": "Sprinter",
+    "description": "Executive black sprinter — 11–14 passengers with premium group comfort.",
+    "maxPassengers": 14,
+    "maxLuggage": 12,
+    "baseFare": 80,
+    "perMile": 10,
+    "minimumFare": 95,
     "suvMultiplier": 1.0
   }
 ]
