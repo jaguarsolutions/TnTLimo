@@ -20,19 +20,17 @@ export default function AdminConfirmButton({ bookingId }: { bookingId: string })
   async function confirm() {
     setStatus("loading");
     setWarning(null);
-    const adminPass = prompt("Enter admin password to confirm:");
-    if (!adminPass) {
-      setStatus("idle");
-      return;
-    }
 
     const res = await fetch(`/api/bookings/${encodeURIComponent(bookingId)}/confirm`, {
       method: "POST",
-      headers: { "x-admin-token": adminPass },
     });
     const data = (await res.json().catch(() => ({}))) as ConfirmResponse;
 
     if (!res.ok) {
+      if (res.status === 401) {
+        router.push("/admin/login");
+        return;
+      }
       alert(data.error ?? "Failed to confirm booking");
       setStatus("error");
       return;

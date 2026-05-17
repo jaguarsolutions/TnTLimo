@@ -5,6 +5,7 @@ import { bookings } from "@/lib/booking/schema";
 import { getStripe, withTenantStripe } from "@/lib/booking/stripe";
 import { ensurePaymentIntent } from "@/lib/booking/stripeSync";
 import { sendBookingCancellation } from "@/lib/booking/email/send";
+import { isAdminRequestAuthenticated } from "@/lib/admin/auth";
 
 export const runtime = "nodejs";
 
@@ -12,9 +13,9 @@ export const runtime = "nodejs";
  * Admin-only cancellation endpoint.
  *
  * Differs from the customer-facing `/api/bookings/[id]/cancel`:
- *   - Auth via `x-admin-token` header (the same `ADMIN_PASS` env var the rest
- *     of the admin endpoints use), NOT the signed manage token. The operator
- *     can cancel any booking without needing the customer's email link.
+ *   - Auth via operator session cookie or `x-admin-token` header matching
+ *     `ADMIN_PASS` env var, NOT the signed manage token. The operator can
+ *     cancel any booking without needing the customer's email link.
  *   - **Bypasses the 24-hour free-cancel window.** The operator can cancel at
  *     any time — useful for vehicle issues, no-shows, weather, etc. The
  *     Stripe refund is still issued in full.
@@ -27,9 +28,7 @@ export async function POST(
   request: Request,
   context: { params: Promise<{ id: string }> }
 ) {
-  const adminPass = process.env.ADMIN_PASS;
-  const token = request.headers.get("x-admin-token");
-  if (!adminPass || token !== adminPass) {
+  if (!(await isAdminRequestAuthenticated(request))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

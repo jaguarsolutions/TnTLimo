@@ -15,21 +15,19 @@ export default function AdminResendEmailButton({ bookingId, variant = "retry" }:
 
   async function send() {
     setStatus("loading");
-    const adminPass = prompt("Enter admin password:");
-    if (!adminPass) {
-      setStatus("idle");
-      return;
-    }
 
     const res = await fetch(`/api/bookings/${encodeURIComponent(bookingId)}/resend-email`, {
       method: "POST",
-      headers: { "x-admin-token": adminPass },
     });
 
     if (res.ok) {
       setStatus("done");
       router.refresh();
     } else {
+      if (res.status === 401) {
+        router.push("/admin/login");
+        return;
+      }
       const data = (await res.json().catch(() => ({}))) as { error?: string };
       alert(data.error ?? "Email could not be sent");
       setStatus("error");

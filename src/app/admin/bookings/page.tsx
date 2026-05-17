@@ -1,9 +1,12 @@
 import Link from "next/link";
 import { and, desc, eq, gte, sql } from "drizzle-orm";
+import { cookies } from "next/headers";
 import { db } from "@/lib/booking/db";
 import { bookings, type BookingStatus } from "@/lib/booking/schema";
 import { signManageToken } from "@/lib/booking/manageToken";
 import { getTenant } from "@/lib/tenant";
+import { ADMIN_SESSION_COOKIE, isAdminSessionValue } from "@/lib/admin/auth";
+import { redirect } from "next/navigation";
 import AdminConfirmButton from "@/components/booking/AdminConfirmButton";
 import AdminResendEmailButton from "@/components/booking/AdminResendEmailButton";
 import AdminCancelButton from "@/components/booking/AdminCancelButton";
@@ -61,6 +64,11 @@ async function loadBookings(tenantSlug: string, status: "all" | BookingStatus) {
 }
 
 export default async function AdminBookingsPage({ searchParams }: PageProps) {
+  const authCookie = (await cookies()).get(ADMIN_SESSION_COOKIE)?.value;
+  if (!(await isAdminSessionValue(authCookie))) {
+    redirect("/admin/login");
+  }
+
   const tenant = getTenant();
   const { status } = await searchParams;
   const activeStatus =

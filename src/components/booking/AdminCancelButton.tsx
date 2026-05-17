@@ -33,22 +33,16 @@ export default function AdminCancelButton({
     setStatus("loading");
     setError(null);
 
-    const adminPass = prompt(
-      `Cancel booking ${confirmationCode} and refund ${total} to the customer?\n\nEnter admin password to continue:`
-    );
-    if (!adminPass) {
-      setStatus("idle");
-      setConfirming(false);
-      return;
-    }
-
     const res = await fetch(`/api/bookings/${encodeURIComponent(bookingId)}/admin-cancel`, {
       method: "POST",
-      headers: { "x-admin-token": adminPass },
     });
     const data = (await res.json().catch(() => ({}))) as CancelResponse;
 
     if (!res.ok) {
+      if (res.status === 401) {
+        router.push("/admin/login");
+        return;
+      }
       setError(data.error ?? "Cancel failed");
       setStatus("error");
       return;

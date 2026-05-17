@@ -22,7 +22,7 @@ export default function PointToPointPage() {
         image={SITE_IMAGES.griffithObservatoryDay}
         imageAlt="Point-to-point ride in Los Angeles"
         highlights={[
-          "Fixed route pricing examples for Anaheim to LAX, SNA, Universal Studios, and Downtown LA.",
+          "Fixed route pricing examples for SNA, Universal Studios, and Downtown LA. For LAX transfers, please use Airport Transfer.",
           "Optional extra stop keeps your trip flexible.",
           "All rides include private black vehicles and free child seats on request.",
           "Passenger groups from 1 to 14 supported with quick quotes.",

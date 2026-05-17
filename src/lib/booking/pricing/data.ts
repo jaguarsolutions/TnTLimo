@@ -56,7 +56,6 @@ export const HOURLY_RATES = {
 } as const;
 
 export const POINT_TO_POINT_FIXED_ROUTES: Record<string, number> = {
-  "Anaheim to LAX": 225,
   "Anaheim to SNA": 95,
   "Anaheim to Universal Studios": 120,
   "Anaheim to Downtown LA": 150,

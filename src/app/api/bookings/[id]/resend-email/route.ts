@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/lib/booking/db";
 import { bookings } from "@/lib/booking/schema";
 import { sendBookingConfirmation } from "@/lib/booking/email/send";
+import { isAdminRequestAuthenticated } from "@/lib/admin/auth";
 
 export const runtime = "nodejs";
 
@@ -14,15 +15,14 @@ export const runtime = "nodejs";
  * customer their confirmation again." On success it stamps
  * `confirmationEmailSentAt` (or refreshes it) and clears the last error.
  *
- * Requires `x-admin-token` header matching `ADMIN_PASS` env var.
+ * Requires a valid operator session cookie or `x-admin-token` header matching
+ * `ADMIN_PASS` env var.
  */
 export async function POST(
   request: Request,
   context: { params: Promise<{ id: string }> }
 ) {
-  const adminPass = process.env.ADMIN_PASS;
-  const token = request.headers.get("x-admin-token");
-  if (!adminPass || token !== adminPass) {
+  if (!(await isAdminRequestAuthenticated(request))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

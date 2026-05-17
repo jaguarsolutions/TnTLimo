@@ -194,6 +194,15 @@ function isValidPhone(value: string) {
   return value.replace(/\D/g, "").length >= 7;
 }
 
+function formatPhoneInput(value: string) {
+  const digits = value.replace(/\D/g, "");
+  if (!digits) return "";
+  const normalized = digits.startsWith("1") ? digits.slice(1) : digits;
+  if (normalized.length <= 3) return `(${normalized}`;
+  if (normalized.length <= 6) return `(${normalized.slice(0, 3)}) ${normalized.slice(3)}`;
+  return `(${normalized.slice(0, 3)}) ${normalized.slice(3, 6)}-${normalized.slice(6, 10)}`;
+}
+
 const BOOKABLE_CODES: ReadonlySet<BookableServiceCode> = new Set([
   "airport-transfer",
   "point-to-point",
@@ -215,9 +224,16 @@ export default function TransportationBookingWizard() {
     service: BookableServiceCode | null;
     step: number;
   }>(() => {
-    const raw = searchParams.get("service");
-    if (raw === "disneyland-transportation") {
-      return { service: "point-to-point", step: 2 };
+    const aliasMap: Record<string, BookableServiceCode> = {
+      "disneyland-transportation": "point-to-point",
+      "airport": "airport-transfer",
+      "hourly": "hourly-charter",
+    };
+
+    const raw = searchParams.get("service")?.toLowerCase() ?? "";
+    const alias = aliasMap[raw];
+    if (alias) {
+      return { service: alias, step: 2 };
     }
     if (isBookableCode(raw)) {
       return { service: raw, step: 2 };
@@ -452,7 +468,10 @@ export default function TransportationBookingWizard() {
   }, [state, quote]);
 
   const handleField = <K extends keyof WizardState>(field: K, value: WizardState[K]) => {
-    setState((current) => ({ ...current, [field]: value }));
+    const nextValue = field === "phone" && typeof value === "string"
+      ? (formatPhoneInput(value) as WizardState[K])
+      : value;
+    setState((current) => ({ ...current, [field]: nextValue }));
   };
 
   const goToStep = (target: number) => {
@@ -779,7 +798,19 @@ export default function TransportationBookingWizard() {
         {state.service ? SERVICE_LABELS[state.service] : "Choose a service to begin"}
       </h3>
       {priceSummary.routeLabel && (
-        <p className="mt-1 text-sm text-muted">{priceSummary.routeLabel}</p>
+        <>
+          <p className="mt-1 text-sm text-muted">{priceSummary.routeLabel}</p>
+          {(state.service === "point-to-point" || state.service === "hourly-charter") && state.pickupAddress && state.dropoffAddress && (
+            <p className="mt-2 text-sm text-muted">
+              {state.pickupAddress} → {state.dropoffAddress}
+            </p>
+          )}
+          {state.service === "airport-transfer" && state.airport && state.otherAddress && (
+            <p className="mt-2 text-sm text-muted">
+              {airportDisplayName(state.airport)} ↔ {state.otherAddress}
+            </p>
+          )}
+        </>
       )}
 
       <dl className="mt-5 space-y-2.5 text-sm text-ink">
@@ -896,7 +927,7 @@ export default function TransportationBookingWizard() {
   const Step1 = (
     <>
       <StepHeader
-        eyebrow="Step 1 of 5"
+        eyebrow="Step 1 of 6"
         title="What kind of ride do you need?"
         subtitle="Pick the option that matches your trip — we’ll only ask the questions that apply."
       />
@@ -907,7 +938,7 @@ export default function TransportationBookingWizard() {
   const Step2 = (
     <>
       <StepHeader
-        eyebrow="Step 2 of 5"
+        eyebrow="Step 2 of 6"
         title="Trip details"
         subtitle="The fields change with the service you picked. Required fields are marked with an asterisk."
       />
@@ -1241,22 +1272,14 @@ export default function TransportationBookingWizard() {
                 Choose the right vehicle for your group. All rides include a private driver, comfortable black vehicles, and free car seats on request.
               </p>
               <div className="mt-5 grid gap-3 sm:grid-cols-2">
-                <div className="rounded-2xl border border-border bg-sand p-4">
-                  <p className="text-sm font-semibold text-ink">Sedan</p>
-                  <p className="mt-2 text-sm text-muted">1-4 passengers · $5/mile · $95 minimum</p>
-                </div>
-                <div className="rounded-2xl border border-border bg-sand p-4">
-                  <p className="text-sm font-semibold text-ink">SUV</p>
-                  <p className="mt-2 text-sm text-muted">5-6 passengers · $6/mile · $95 minimum</p>
-                </div>
-                <div className="rounded-2xl border border-border bg-sand p-4">
-                  <p className="text-sm font-semibold text-ink">Van</p>
-                  <p className="mt-2 text-sm text-muted">7-10 passengers · $8/mile · $95 minimum</p>
-                </div>
-                <div className="rounded-2xl border border-border bg-sand p-4">
-                  <p className="text-sm font-semibold text-ink">Sprinter</p>
-                  <p className="mt-2 text-sm text-muted">11-14 passengers · $10/mile · $95 minimum</p>
-                </div>
+                {eligibleVehicles.map((vehicle) => (
+                  <div key={vehicle.id} className="rounded-2xl border border-border bg-sand p-4">
+                    <p className="text-sm font-semibold text-ink">{vehicle.name}</p>
+                    <p className="mt-2 text-sm text-muted">
+                      Up to {vehicle.maxPassengers} passengers · ${vehicle.perMile}/mile · ${vehicle.minimumFare} minimum
+                    </p>
+                  </div>
+                ))}
               </div>
             </div>
 
@@ -1278,7 +1301,7 @@ export default function TransportationBookingWizard() {
                     }));
                   }}
                 />
-                {quote.kind === "error" && quote.offending === "pickup" && (
+                {quote.kind === "error" && (quote.offending === "pickup" || quote.offending === "both") && (
                   <p className="mt-2 text-xs text-red-700" role="alert">{quote.message}</p>
                 )}
               </div>
@@ -1289,7 +1312,7 @@ export default function TransportationBookingWizard() {
                   value={state.dropoffAddress}
                   placeId={state.dropoffPlaceId}
                   required
-                  placeholder="Airport, attraction, or venue."
+                  placeholder="Destination — must also be within 20 miles of our home base."
                   onChange={(picked) => {
                     setState((s) => ({
                       ...s,
@@ -1441,6 +1464,14 @@ export default function TransportationBookingWizard() {
                 onChange={(v) => handleField("hours", v)}
               />
               <p className="mt-2 text-xs text-muted">4-hour minimum. Longer days fine — we’ll plan stops with you.</p>
+              <p className="mt-2 text-xs text-muted">
+                {(() => {
+                  const hourlyRate = HOURLY_RATES[state.passengerGroup as keyof typeof HOURLY_RATES] ?? 0;
+                  return `$${hourlyRate}/hr × ${state.hours} hours = ${formatCurrency(
+                    hourlyRate * state.hours
+                  )}`;
+                })()}
+              </p>
             </div>
             <div>
               <label htmlFor="planned-stops" className={labelClass}>Planned stops or notes</label>
@@ -1473,7 +1504,7 @@ export default function TransportationBookingWizard() {
   const Step3 = (
     <>
       <StepHeader
-        eyebrow="Step 3 of 5"
+        eyebrow="Step 3 of 6"
         title="Who’s riding?"
         subtitle="Helps us match the right vehicle and seats."
       />
@@ -1571,7 +1602,7 @@ export default function TransportationBookingWizard() {
   const Step4 = (
     <>
       <StepHeader
-        eyebrow="Step 4 of 5"
+        eyebrow="Step 4 of 6"
         title="Your contact info"
         subtitle="So we can reach you with confirmation and pickup details."
       />
@@ -1645,7 +1676,7 @@ export default function TransportationBookingWizard() {
   const Step5 = (
     <>
       <StepHeader
-        eyebrow="Step 5 of 5"
+        eyebrow="Step 5 of 6"
         title="Review your booking"
         subtitle="Take a quick look. You can jump back to any step from the progress bar above."
       />
@@ -2026,7 +2057,7 @@ export default function TransportationBookingWizard() {
           Transportation booking
         </span>
         <h1 className="mt-5 font-display text-3xl sm:text-4xl md:text-5xl font-semibold text-ink leading-tight">
-          Book your ride in five quick steps.
+          Book your ride in six quick steps.
         </h1>
         <p className="mt-4 text-sm sm:text-base text-muted leading-relaxed">
           Airport transfers, point-to-point trips, and hourly charters across Anaheim, Orange County, and Los Angeles.
@@ -2096,11 +2127,29 @@ export default function TransportationBookingWizard() {
                 ← Back
               </button>
               <button type="button" onClick={handleNext} className={buttonPrimary}>
-                {step === 5 ? "Continue to confirm" : step === 1 ? "Continue" : "Continue"}
+                Continue →
                 <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <path d="M5 12h14M13 5l7 7-7 7" />
                 </svg>
               </button>
+            </div>
+          )}
+
+          {step < TOTAL_STEPS && (
+            <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-white px-4 py-3 shadow-[0_-16px_30px_-18px_rgba(12,11,10,0.18)] lg:hidden">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  {priceSummary.routeLabel && (
+                    <p className="truncate text-xs text-muted">{priceSummary.routeLabel}</p>
+                  )}
+                  <p className="truncate text-sm font-semibold text-ink">
+                    {priceSummary.total !== null ? formatCurrency(priceSummary.total) : "Quote pending"}
+                  </p>
+                </div>
+                <button type="button" onClick={handleNext} className={`${buttonPrimary} min-w-[150px] py-2`}>
+                  Continue →
+                </button>
+              </div>
             </div>
           )}
         </div>

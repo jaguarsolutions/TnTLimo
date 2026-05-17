@@ -4,12 +4,13 @@ import { db } from "@/lib/booking/db";
 import { bookings } from "@/lib/booking/schema";
 import { dispatchConfirmationEmail } from "@/lib/booking/email/dispatch";
 import { ensurePaymentIntent } from "@/lib/booking/stripeSync";
+import { isAdminRequestAuthenticated } from "@/lib/admin/auth";
 
 export const runtime = "nodejs";
 
 /**
  * Admin-only manual confirm endpoint.
- * Requires the `x-admin-token` header matching `ADMIN_PASS` env var.
+ * Requires a valid operator session cookie or the `x-admin-token` header.
  * Used when the Stripe webhook fails or hasn't been configured yet.
  *
  * Promotion to `confirmed` and the confirmation email are separated so a
@@ -21,9 +22,7 @@ export async function POST(
   request: Request,
   context: { params: Promise<{ id: string }> }
 ) {
-  const adminPass = process.env.ADMIN_PASS;
-  const token = request.headers.get("x-admin-token");
-  if (!adminPass || token !== adminPass) {
+  if (!(await isAdminRequestAuthenticated(request))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
