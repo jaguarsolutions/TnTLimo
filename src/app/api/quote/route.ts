@@ -9,8 +9,7 @@ import {
   getVehicle,
   type Quote,
 } from "@/lib/pricing/engine";
-import { lookupFixedRoute } from "@/lib/pricing/fixedRoutes";
-
+import { lookupFixedRoute } from "@/lib/pricing/fixedRoutes";import { SITE_CONTACT } from "@/lib/siteContact";
 export const runtime = "nodejs";
 
 /**
@@ -107,7 +106,8 @@ export async function POST(request: Request) {
             : !pickupInArea
               ? "pickup"
               : "dropoff",
-        message: "We currently only service point-to-point rides within 20 miles of our home base.",
+        message:
+          `We typically service point-to-point rides within 20 miles of our home base. If you’re outside that range, please call ${SITE_CONTACT.phoneDisplay} — we may be able to accommodate your trip.`,
       },
       { status: 400 }
     );

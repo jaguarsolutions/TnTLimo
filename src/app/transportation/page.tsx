@@ -6,6 +6,7 @@ import TransportationServiceCard from "@/components/transportation/Transportatio
 import { SectionHeading } from "@/components/transportation/TransportationSection";
 import { SITE_IMAGES } from "@/lib/siteImages";
 import { TRANSPORTATION_SERVICES, TRANSPORTATION_OVERVIEW_CARDS } from "@/lib/transportationData";
+import FamilyCarSeats from "@/components/FamilyCarSeats";
 
 export default function TransportationPage() {
   return (
@@ -15,7 +16,14 @@ export default function TransportationPage() {
         <section className="relative overflow-hidden pt-36 pb-20 sm:pt-44">
           {/* Photo background — extends behind the fixed header */}
           <div className="absolute inset-0">
-            <Image src={SITE_IMAGES.santaMonicaPalms} alt="Anaheim palm-lined street" fill className="object-cover" />
+            <Image
+              src={SITE_IMAGES.santaMonicaPalms}
+              alt="Anaheim palm-lined street"
+              fill
+              sizes="100vw"
+              loading="eager"
+              className="object-cover"
+            />
           </div>
           {/* Cinematic overlay matched to homepage hero */}
           <div
@@ -58,6 +66,17 @@ export default function TransportationPage() {
                 >
                   Explore services
                 </Link>
+              </div>
+              <div className="mt-6 max-w-md">
+                <FamilyCarSeats
+                  variant="callout"
+                  photos={[
+                    {
+                      src: SITE_IMAGES.carSeatParentInstalling,
+                      alt: "Driver installing a child car seat inside a black vehicle",
+                    },
+                  ]}
+                />
               </div>
             </div>
           </div>
@@ -153,7 +172,14 @@ export default function TransportationPage() {
             <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
               <article className="rounded-[2rem] border border-border bg-sand overflow-hidden">
                 <div className="relative aspect-[4/3] overflow-hidden">
-                  <Image src={SITE_IMAGES.blackSedan} alt="Black sedan" fill className="object-cover" />
+                  <Image
+                    src={SITE_IMAGES.blackSedan}
+                    alt="Black sedan"
+                    fill
+                    sizes="(max-width: 768px) 100vw, 25vw"
+                    loading="eager"
+                    className="object-cover"
+                  />
                 </div>
                 <div className="p-6">
                   <h3 className="font-display text-xl font-semibold text-ink">Sedan</h3>
@@ -163,7 +189,13 @@ export default function TransportationPage() {
               </article>
               <article className="rounded-[2rem] border border-border bg-sand overflow-hidden">
                 <div className="relative aspect-[4/3] overflow-hidden">
-                  <Image src={SITE_IMAGES.blackSuv} alt="Black SUV" fill className="object-cover" />
+                  <Image
+                    src={SITE_IMAGES.blackSuv}
+                    alt="Black SUV"
+                    fill
+                    sizes="(max-width: 768px) 100vw, 25vw"
+                    className="object-cover"
+                  />
                 </div>
                 <div className="p-6">
                   <h3 className="font-display text-xl font-semibold text-ink">SUV</h3>
@@ -173,7 +205,13 @@ export default function TransportationPage() {
               </article>
               <article className="rounded-[2rem] border border-border bg-sand overflow-hidden">
                 <div className="relative aspect-[4/3] overflow-hidden">
-                  <Image src={SITE_IMAGES.blackVan} alt="Black van" fill className="object-cover" />
+                  <Image
+                    src={SITE_IMAGES.blackVan}
+                    alt="Black van"
+                    fill
+                    sizes="(max-width: 768px) 100vw, 25vw"
+                    className="object-cover"
+                  />
                 </div>
                 <div className="p-6">
                   <h3 className="font-display text-xl font-semibold text-ink">Van</h3>
@@ -183,7 +221,13 @@ export default function TransportationPage() {
               </article>
               <article className="rounded-[2rem] border border-border bg-sand overflow-hidden">
                 <div className="relative aspect-[4/3] overflow-hidden">
-                  <Image src={SITE_IMAGES.blackSprinter} alt="Black sprinter van" fill className="object-cover" />
+                  <Image
+                    src={SITE_IMAGES.blackSprinter}
+                    alt="Black sprinter van"
+                    fill
+                    sizes="(max-width: 768px) 100vw, 25vw"
+                    className="object-cover"
+                  />
                 </div>
                 <div className="p-6">
                   <h3 className="font-display text-xl font-semibold text-ink">Sprinter</h3>

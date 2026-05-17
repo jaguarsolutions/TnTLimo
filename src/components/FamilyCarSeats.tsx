@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { motion } from "framer-motion";
 import { fadeUp, stagger, viewport } from "@/lib/motionVariants";
 
@@ -94,6 +95,7 @@ export interface FamilyCarSeatsProps {
 
 export default function FamilyCarSeats({ photos = [], variant = "section" }: FamilyCarSeatsProps) {
   if (variant === "callout") {
+    const photo = photos[0];
     return (
       <motion.div
         variants={fadeUp}
@@ -102,12 +104,25 @@ export default function FamilyCarSeats({ photos = [], variant = "section" }: Fam
         viewport={viewport}
         className="rounded-3xl border border-gold/20 bg-gradient-to-br from-cream to-sand/60 p-7 sm:p-9"
       >
-        <div className="flex items-start gap-4">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gold/20 ring-1 ring-gold/30">
-            <svg className="w-6 h-6 text-gold" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-            </svg>
-          </div>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+          {photo ? (
+            <div className="relative h-40 w-full overflow-hidden rounded-3xl bg-sand sm:h-44 sm:w-44">
+              <Image
+                src={photo.src}
+                alt={photo.alt}
+                fill
+                sizes="(max-width: 640px) 100vw, 240px"
+                loading="eager"
+                className="object-cover"
+              />
+            </div>
+          ) : (
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gold/20 ring-1 ring-gold/30">
+              <svg className="w-6 h-6 text-gold" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+              </svg>
+            </div>
+          )}
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 flex-wrap">
               <h3 className="font-display text-lg sm:text-xl font-semibold text-ink">
