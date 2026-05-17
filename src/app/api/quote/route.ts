@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { isWithinServiceArea } from "@/lib/geo/service-area";
+import { isWithinServiceArea, POINT_TO_POINT_SERVICE_AREA } from "@/lib/geo/service-area";
 import { resolvePlace, type ResolvedPlace } from "@/lib/maps/places";
 import { computeDriveDistanceMiles } from "@/lib/maps/routes";
 import {
@@ -21,7 +21,7 @@ export const runtime = "nodejs";
  * Flow:
  *   1. Validate payload (zod).
  *   2. Resolve both Place IDs to lat/lng via Places API.
- *   3. Reject if either point is outside the 50-mile Anaheim service area.
+ *   3. Reject if either point is outside the 20-mile home base service area.
  *   4. If both endpoints match one of the four published anchor pairs,
  *      return the fixed price (skip Routes API).
  *   5. Otherwise call Routes API, run distance through the pricing engine.
@@ -95,8 +95,8 @@ export async function POST(request: Request) {
   }
 
   /* ── 3. Service area check ──────────────────────────────────────────── */
-  const pickupInArea = isWithinServiceArea(pickup.location);
-  const dropoffInArea = isWithinServiceArea(dropoff.location);
+  const pickupInArea = isWithinServiceArea(pickup.location, POINT_TO_POINT_SERVICE_AREA);
+  const dropoffInArea = isWithinServiceArea(dropoff.location, POINT_TO_POINT_SERVICE_AREA);
   if (!pickupInArea || !dropoffInArea) {
     return NextResponse.json(
       {
@@ -107,7 +107,7 @@ export async function POST(request: Request) {
             : !pickupInArea
               ? "pickup"
               : "dropoff",
-        message: "We currently only service locations within 50 miles of Anaheim, CA.",
+        message: "We currently only service point-to-point rides within 20 miles of our home base.",
       },
       { status: 400 }
     );

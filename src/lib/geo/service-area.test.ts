@@ -4,10 +4,14 @@ import {
   haversineMeters,
   isWithinServiceArea,
   milesToMeters,
+  POINT_TO_POINT_SERVICE_AREA,
   SERVICE_AREA,
 } from "./service-area";
 
 const ANAHEIM = SERVICE_AREA.center;
+const POINT_TO_POINT_HOME_BASE = POINT_TO_POINT_SERVICE_AREA.center;
+const DOWNTOWN_LA = { lat: 34.0522, lng: -118.2437 };
+const SANTA_MONICA = { lat: 34.0195, lng: -118.4912 };
 const LAX = { lat: 33.9416, lng: -118.4085 };
 const SAN_DIEGO = { lat: 32.7157, lng: -117.1611 };
 const LAS_VEGAS = { lat: 36.1699, lng: -115.1398 };
@@ -58,5 +62,15 @@ describe("isWithinServiceArea (50-mile Anaheim)", () => {
 
   it("rejects Las Vegas (~225 mi)", () => {
     expect(isWithinServiceArea(LAS_VEGAS)).toBe(false);
+  });
+});
+
+describe("isWithinServiceArea (20-mile point-to-point home base)", () => {
+  it("accepts downtown Los Angeles inside 20 miles", () => {
+    expect(isWithinServiceArea(DOWNTOWN_LA, POINT_TO_POINT_SERVICE_AREA)).toBe(true);
+  });
+
+  it("rejects Santa Monica outside 20 miles", () => {
+    expect(isWithinServiceArea(SANTA_MONICA, POINT_TO_POINT_SERVICE_AREA)).toBe(false);
   });
 });

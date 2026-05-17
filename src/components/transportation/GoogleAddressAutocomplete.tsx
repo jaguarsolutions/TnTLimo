@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import { setOptions, importLibrary } from "@googlemaps/js-api-loader";
-import serviceAreaConfig from "@/../config/service-area.json";
+import pointToPointServiceAreaConfig from "@/../config/point-to-point-service-area.json";
 import { milesToMeters } from "@/lib/geo/service-area";
 
 /**
@@ -10,7 +10,7 @@ import { milesToMeters } from "@/lib/geo/service-area";
  *
  * Uses the newer `PlaceAutocompleteElement` web component (replaces the
  * legacy Autocomplete class which Google has stopped enhancing). The
- * `locationRestriction` is bound to our 50-mile Anaheim service area so
+ * `locationRestriction` is bound to our 20-mile home base service area so
  * out-of-area suggestions never appear.
  *
  * The browser API key (`NEXT_PUBLIC_GOOGLE_MAPS_BROWSER_KEY`) must be
@@ -18,7 +18,7 @@ import { milesToMeters } from "@/lib/geo/service-area";
  * Places API.
  */
 
-const SERVICE_AREA = serviceAreaConfig as {
+const SERVICE_AREA = pointToPointServiceAreaConfig as {
   center: { lat: number; lng: number };
   radiusMiles: number;
 };

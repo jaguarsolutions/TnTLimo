@@ -1268,7 +1268,7 @@ export default function TransportationBookingWizard() {
                   value={state.pickupAddress}
                   placeId={state.pickupPlaceId}
                   required
-                  placeholder="Start typing — we'll only show locations within 50 miles of Anaheim."
+                  placeholder="Start typing — we'll only show locations within 20 miles of our home base."
                   inputRef={(el) => { firstFieldRef.current = el; }}
                   onChange={(picked) => {
                     setState((s) => ({

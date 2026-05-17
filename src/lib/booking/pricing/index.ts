@@ -18,7 +18,7 @@ import { calculatePointToPointPrice } from "./pointToPoint";
 import { calculateHourlyCharterPrice } from "./hourlyCharter";
 import { resolvePlace } from "@/lib/maps/places";
 import { computeDriveDistanceMiles } from "@/lib/maps/routes";
-import { isWithinServiceArea } from "@/lib/geo/service-area";
+import { isWithinServiceArea, POINT_TO_POINT_SERVICE_AREA } from "@/lib/geo/service-area";
 import { lookupFixedRoute } from "@/lib/pricing/fixedRoutes";
 import {
   computeFixedRouteQuote,
@@ -206,10 +206,11 @@ async function computePointToPointFromPlaceIds(
     return { kind: "manual-quote", reason: "Couldn't resolve those addresses with Google." };
   }
 
-  if (!isWithinServiceArea(pickup.location) || !isWithinServiceArea(dropoff.location)) {
+  if (!isWithinServiceArea(pickup.location, POINT_TO_POINT_SERVICE_AREA) ||
+      !isWithinServiceArea(dropoff.location, POINT_TO_POINT_SERVICE_AREA)) {
     return {
       kind: "manual-quote",
-      reason: "One of the addresses is outside our 50-mile service area.",
+      reason: "One of the addresses is outside our 20-mile point-to-point service radius.",
     };
   }
 

@@ -1,4 +1,5 @@
 import serviceAreaConfig from "@/../config/service-area.json";
+import pointToPointServiceAreaConfig from "@/../config/point-to-point-service-area.json";
 
 /** Earth's mean radius in miles. */
 const EARTH_RADIUS_MILES = 3958.7613;
@@ -16,6 +17,8 @@ export interface ServiceAreaConfig {
 }
 
 export const SERVICE_AREA: ServiceAreaConfig = serviceAreaConfig as ServiceAreaConfig;
+export const POINT_TO_POINT_SERVICE_AREA: ServiceAreaConfig =
+  pointToPointServiceAreaConfig as ServiceAreaConfig;
 
 export const SERVICE_AREA_RADIUS_METERS = milesToMeters(SERVICE_AREA.radiusMiles);
 
