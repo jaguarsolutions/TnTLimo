@@ -17,7 +17,6 @@ const quickLinks = [
 const transportationLinks = [
   { label: "All transportation", href: "/transportation" },
   { label: "Airport Transfers", href: "/transportation/airport-transfer" },
-  { label: "Disneyland & Hotel", href: "/transportation/disneyland-transportation" },
   { label: "Point-to-Point", href: "/transportation/point-to-point" },
   { label: "Hourly Charter", href: "/transportation/hourly-charter" },
 ];

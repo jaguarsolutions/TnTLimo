@@ -32,11 +32,6 @@ const navLinks: NavLink[] = [
         description: "LAX, SNA, LGB, BUR, ONT, SAN",
       },
       {
-        label: "Disneyland & Hotel",
-        href: "/transportation/disneyland-transportation",
-        description: "Hotel, parks & convention rides",
-      },
-      {
         label: "Point-to-Point",
         href: "/transportation/point-to-point",
         description: "One-way private rides",

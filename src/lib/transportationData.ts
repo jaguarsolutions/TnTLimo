@@ -35,26 +35,16 @@ export const TRANSPORTATION_SERVICES = [
     title: "Airport Transfers",
     description:
       "Reliable private airport transportation to and from Anaheim, Disneyland-area hotels, and major Southern California airports including LAX, SNA, Long Beach, Burbank, Ontario, and San Diego.",
-    highlight: "Arrive relaxed with meet & greet support.",
+    highlight: "Arrive relaxed with meet & greet support plus free child seats on request.",
     image: SITE_IMAGES.waltDisneyConcertHall,
     imageAlt: "Airport transfer shuttle arriving at hotel lobby",
     href: "/transportation/airport-transfer",
   },
   {
-    code: "disneyland-transportation" as const,
-    title: "Disneyland & Hotel Transportation",
-    description:
-      "Comfortable private transportation for families and groups traveling between hotels, airports, Disneyland, Universal Studios, and popular Southern California destinations.",
-    highlight: "Family-friendly vehicles with luggage room and child seats on request.",
-    image: SITE_IMAGES.universalGlobe,
-    imageAlt: "Family transportation around Disneyland and Anaheim",
-    href: "/transportation/disneyland-transportation",
-  },
-  {
     code: "point-to-point" as const,
     title: "Point-to-Point Transportation",
     description:
-      "Private transportation between hotels, attractions, airports, restaurants, event venues, and other destinations across Anaheim and Los Angeles.",
+      "Direct private rides across Anaheim and Greater LA, including Disneyland-area hotels, airports, attractions, and event venues.",
     highlight: "One-way convenience with a friendly local driver and free child seats on request.",
     image: SITE_IMAGES.griffithObservatoryDay,
     imageAlt: "Point-to-point transportation in Los Angeles",
@@ -65,7 +55,7 @@ export const TRANSPORTATION_SERVICES = [
     title: "Hourly Charter",
     description:
       "Reserve a private vehicle and driver by the hour for events, shopping, sightseeing, business travel, or multiple stops.",
-    highlight: "Custom timing, planned stops, and a private vehicle for your group.",
+    highlight: "Custom timing, private vehicles, and free child seats on request.",
     image: SITE_IMAGES.santaMonicaPalms,
     imageAlt: "Hourly charter service with scenic California palm trees",
     href: "/transportation/hourly-charter",
@@ -134,11 +124,11 @@ export const TRANSPORTATION_SERVICE_DETAILS = {
   "point-to-point": {
     title: "Point-to-Point Transportation",
     shortDescription:
-      "Direct, single-stop transportation for any one-way trip in the Anaheim area and Greater LA.",
+      "Direct private transportation for any one-way trip in Anaheim and Greater LA, including Disneyland-area hotels and airport transfers.",
     bullets: [
       "Fixed route pricing for Anaheim to LAX, SNA, Universal Studios, and Downtown LA.",
       "Optional extra stop helps keep travel flexible.",
-      "Ideal for transfers, meetings, and hotel-to-venue rides.",
+      "Ideal for transfers, meetings, hotel-to-park rides, and airport connections.",
       "Passenger groups from 1 to 14 plus custom quotes for larger parties.",
     ],
   },

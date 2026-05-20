@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { useSearchParams } from "next/navigation";
@@ -22,10 +21,11 @@ import {
 } from "@/lib/transportationData";
 import { AIRPORTS } from "@/lib/transportationLocations";
 import { SITE_CONTACT } from "@/lib/siteContact";
-import { SITE_IMAGES } from "@/lib/siteImages";
 import { FORM_SUBJECT_PREFIX } from "@/lib/siteEnv";
 import { VEHICLES, vehiclesForPassengerCount } from "@/lib/pricing/engine";
+import ChildSeatSelector from "./ChildSeatSelector";
 import GoogleAddressAutocomplete from "./GoogleAddressAutocomplete";
+import VehicleSelector from "./VehicleSelector";
 
 const WEB3_KEY = process.env.NEXT_PUBLIC_WEB3FORMS_ACCESS_KEY ?? "";
 
@@ -52,13 +52,6 @@ const buttonPrimary =
 
 const buttonSecondary =
   "inline-flex items-center justify-center gap-2 rounded-full border border-border bg-white px-7 py-3 text-sm font-semibold text-ink transition hover:border-ink cursor-pointer focus:outline-none focus:ring-2 focus:ring-gold focus:ring-offset-2 focus:ring-offset-cream";
-
-const VEHICLE_IMAGE_BY_ID: Record<string, string> = {
-  sedan: SITE_IMAGES.blackSedan,
-  suv: SITE_IMAGES.blackSuv,
-  van: SITE_IMAGES.blackVan,
-  sprinter: SITE_IMAGES.blackSprinter,
-};
 
 type ServiceCode = BookableServiceCode;
 
@@ -118,7 +111,7 @@ const INITIAL_STATE: WizardState = {
   pickupPlaceId: "",
   dropoffPlaceId: "",
   otherAddressPlaceId: "",
-  vehicleId: "towncar",
+  vehicleId: VEHICLES[0]?.id ?? "",
   extraStop: false,
   extraStopDetails: "",
   pickupDateTime: "",
@@ -346,14 +339,13 @@ export default function TransportationBookingWizard() {
   ]);
 
   useEffect(() => {
-    if (state.service !== "point-to-point") return;
     const passengerCount = passengersFromGroup(state.passengerGroup);
     const eligibleVehicles = vehiclesForPassengerCount(passengerCount);
-    if (eligibleVehicles.length === 0) return;
+    const firstEligible = eligibleVehicles[0]?.id ?? "";
     if (!eligibleVehicles.some((v) => v.id === state.vehicleId)) {
-      setState((current) => ({ ...current, vehicleId: eligibleVehicles[0].id }));
+      setState((current) => ({ ...current, vehicleId: firstEligible }));
     }
-  }, [state.service, state.passengerGroup, state.vehicleId]);
+  }, [state.passengerGroup, state.vehicleId]);
 
   /* Focus management & scroll on step change */
   useEffect(() => {
@@ -530,6 +522,11 @@ export default function TransportationBookingWizard() {
     }
     if (currentStep === 3) {
       if (!state.passengerGroup) return "Please choose a passenger group.";
+      const passengerCount = passengersFromGroup(state.passengerGroup);
+      const eligibleVehicles = vehiclesForPassengerCount(passengerCount);
+      if (eligibleVehicles.length > 0 && !eligibleVehicles.some((v) => v.id === state.vehicleId)) {
+        return "Please choose a vehicle.";
+      }
       if (state.luggageCount < 0) return "Luggage count can’t be negative.";
     }
     if (currentStep === 4) {
@@ -1222,7 +1219,6 @@ export default function TransportationBookingWizard() {
       {state.service === "point-to-point" && (() => {
         const passengerCount = passengersFromGroup(state.passengerGroup);
         const eligibleVehicles = vehiclesForPassengerCount(passengerCount);
-        const eligibleIds = new Set(eligibleVehicles.map((v) => v.id));
         return (
           <div className="space-y-6">
             {/* How many passengers — surfaced on Step 2 because it directly
@@ -1323,61 +1319,13 @@ export default function TransportationBookingWizard() {
               </div>
             )}
 
-            {/* Vehicle picker — config-driven (config/vehicles.json). Options
-                below current passenger count are hidden. */}
-            <div>
-              <span className={labelClass}>Vehicle <RequiredMark /></span>
-              <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Vehicle type">
-                {VEHICLES.map((v) => {
-                  const eligible = eligibleIds.has(v.id);
-                  if (!eligible) return null;
-                  const selected = state.vehicleId === v.id;
-                  return (
-                    <button
-                      key={v.id}
-                      type="button"
-                      role="radio"
-                      aria-checked={selected}
-                      onClick={() => handleField("vehicleId", v.id)}
-                      className={`flex items-start justify-between gap-3 text-left p-4 rounded-2xl border-2 transition cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-cream ${
-                        selected ? "border-gold bg-gold/5" : "border-border bg-white hover:border-ink/40"
-                      }`}
-                    >
-                      <div className="flex items-start gap-3 min-w-0">
-                        <div className="relative h-16 w-24 shrink-0 overflow-hidden rounded-2xl bg-sand">
-                          <Image
-                            src={VEHICLE_IMAGE_BY_ID[v.id] ?? SITE_IMAGES.blackSedan}
-                            alt={`${v.name} vehicle`}
-                            fill
-                            sizes="96px"
-                            loading="eager"
-                            className="object-cover"
-                          />
-                        </div>
-                        <div className="min-w-0">
-                          <span className="block text-sm font-semibold text-ink">{v.name}</span>
-                          <span className="block text-xs text-muted mt-1">
-                            Up to {v.maxPassengers} passengers · {v.maxLuggage} bags
-                          </span>
-                          <p className="mt-2 text-sm text-muted">
-                            ${v.perMile}/mile · ${v.minimumFare} minimum
-                          </p>
-                          {v.description && (
-                            <span className="block text-xs text-muted/85 mt-1 leading-snug">{v.description}</span>
-                          )}
-                        </div>
-                      </div>
-                      {selected && <CheckBadge />}
-                    </button>
-                  );
-                })}
-              </div>
-              {eligibleVehicles.length === 0 && (
-                <p className="mt-2 text-xs text-sunset" role="alert">
-                  No vehicle in our catalog seats {passengerCount} passengers. Please call us for a multi-vehicle setup.
-                </p>
-              )}
-            </div>
+            <VehicleSelector
+              label="Vehicle"
+              description="Choose the vehicle for this trip."
+              vehicles={eligibleVehicles}
+              selectedId={state.vehicleId}
+              onSelect={(vehicleId) => handleField("vehicleId", vehicleId)}
+            />
 
             <div className={fieldGroup}>
               <div>
@@ -1551,6 +1499,16 @@ export default function TransportationBookingWizard() {
         </div>
       )}
 
+      {state.service !== "point-to-point" && (
+        <VehicleSelector
+          label="Vehicle"
+          description="Choose the vehicle that best fits your group size and luggage."
+          vehicles={vehiclesForPassengerCount(passengersFromGroup(state.passengerGroup))}
+          selectedId={state.vehicleId}
+          onSelect={(vehicleId) => handleField("vehicleId", vehicleId)}
+        />
+      )}
+
       <div className={fieldGroup}>
         <div>
           <span className={labelClass}>Luggage</span>
@@ -1565,35 +1523,10 @@ export default function TransportationBookingWizard() {
         </div>
       </div>
 
-      <div className="rounded-2xl border border-border bg-white p-5">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted">Child seats — free, on request</p>
-        <div className="mt-3 grid gap-2 sm:grid-cols-2">
-          {CHILD_SEAT_OPTIONS.map((option) => {
-            const checked = state.childSeats.includes(option.value);
-            return (
-              <label
-                key={option.value}
-                className={`flex items-center gap-3 px-4 py-3 rounded-xl border cursor-pointer transition min-h-[48px] ${
-                  checked ? "border-gold bg-gold/5" : "border-border bg-white hover:border-ink/40"
-                }`}
-              >
-                <input
-                  type="checkbox"
-                  checked={checked}
-                  onChange={(e) => {
-                    const next = e.target.checked
-                      ? [...state.childSeats, option.value]
-                      : state.childSeats.filter((s) => s !== option.value);
-                    handleField("childSeats", next);
-                  }}
-                  className="h-4 w-4 rounded border-border text-gold focus:ring-gold"
-                />
-                <span className="text-sm font-medium text-ink">{option.label}</span>
-              </label>
-            );
-          })}
-        </div>
-      </div>
+      <ChildSeatSelector
+        selected={state.childSeats}
+        onChange={(next) => handleField("childSeats", next)}
+      />
     </>
   );
 
@@ -1756,6 +1689,7 @@ export default function TransportationBookingWizard() {
           onEdit={() => goToStep(3)}
           rows={[
             { label: "Group", value: PASSENGER_GROUPS.find((p) => p.value === state.passengerGroup)?.label ?? "—" },
+            { label: "Vehicle", value: VEHICLES.find((v) => v.id === state.vehicleId)?.name ?? "Standard" },
             { label: "Luggage", value: String(state.luggageCount) },
             {
               label: "Child seats",

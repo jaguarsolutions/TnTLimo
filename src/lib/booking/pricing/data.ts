@@ -30,6 +30,8 @@ export const CHILD_SEAT_OPTIONS = [
   { label: "High-back booster", value: "high-back-booster" },
 ] as const;
 
+export type ChildSeatOption = (typeof CHILD_SEAT_OPTIONS)[number];
+
 export const GRATUITY_OPTIONS = [
   { label: "15%", value: "15" },
   { label: "20%", value: "20" },
@@ -39,14 +41,54 @@ export const GRATUITY_OPTIONS = [
 
 export const AIRPORT_OPTIONS = ["SNA", "LAX", "LGB", "BUR", "ONT", "SAN"] as const;
 
-export const AIRPORT_PRICING = {
-  SNA: { "1-4": 85, "5-6": 110, "7-10": 165, "11-14": 185 },
-  LAX: { "1-4": 175, "5-6": 195, "7-10": 260, "11-14": 320 },
-  LGB: { "1-4": 95, "5-6": 120, "7-10": 180, "11-14": 220 },
-  BUR: { "1-4": 185, "5-6": 210, "7-10": 285, "11-14": 325 },
-  ONT: { "1-4": 185, "5-6": 195, "7-10": 295, "11-14": 335 },
-  SAN: { "1-4": 375, "5-6": 425, "7-10": 550, "11-14": 595 },
-} as const;
+export type AirportPricingConfig = {
+  distanceMiles: number;
+  rates: {
+    "1-4": number;
+    "5-6": number;
+    "7-10": number;
+    "11-14": number;
+  };
+  perMileAfterBaseline: {
+    "1-4": number;
+    "5-6": number;
+    "7-10": number;
+    "11-14": number;
+  };
+};
+
+export const AIRPORT_PRICING: Record<(typeof AIRPORT_OPTIONS)[number], AirportPricingConfig> = {
+  SNA: {
+    distanceMiles: 14,
+    rates: { "1-4": 85, "5-6": 110, "7-10": 145, "11-14": 185 },
+    perMileAfterBaseline: { "1-4": 5, "5-6": 6, "7-10": 8, "11-14": 10 },
+  },
+  LAX: {
+    distanceMiles: 34,
+    rates: { "1-4": 175, "5-6": 195, "7-10": 220, "11-14": 320 },
+    perMileAfterBaseline: { "1-4": 5, "5-6": 6, "7-10": 8, "11-14": 10 },
+  },
+  LGB: {
+    distanceMiles: 18,
+    rates: { "1-4": 95, "5-6": 120, "7-10": 140, "11-14": 220 },
+    perMileAfterBaseline: { "1-4": 5, "5-6": 6, "7-10": 8, "11-14": 10 },
+  },
+  BUR: {
+    distanceMiles: 38,
+    rates: { "1-4": 185, "5-6": 195, "7-10": 235, "11-14": 335 },
+    perMileAfterBaseline: { "1-4": 5, "5-6": 6, "7-10": 8, "11-14": 10 },
+  },
+  ONT: {
+    distanceMiles: 40,
+    rates: { "1-4": 185, "5-6": 195, "7-10": 235, "11-14": 335 },
+    perMileAfterBaseline: { "1-4": 5, "5-6": 6, "7-10": 8, "11-14": 10 },
+  },
+  SAN: {
+    distanceMiles: 90,
+    rates: { "1-4": 375, "5-6": 425, "7-10": 495, "11-14": 595 },
+    perMileAfterBaseline: { "1-4": 5, "5-6": 6, "7-10": 8, "11-14": 10 },
+  },
+};
 
 export const HOURLY_RATES = {
   "1-4": 95,
