@@ -120,6 +120,10 @@ async function handleCreate(request: Request, diagnosticId: string) {
     passengerGroup: String(payload.passengerGroup ?? ""),
     gratuity: String(payload.gratuity ?? "0"),
     airport: typeof payload.airport === "string" ? payload.airport : undefined,
+    otherAddressPlaceId:
+      typeof (payload as Record<string, unknown>).otherAddressPlaceId === "string"
+        ? ((payload as Record<string, unknown>).otherAddressPlaceId as string)
+        : undefined,
     meetAndGreet: Boolean(payload.meetAndGreet),
     roundTrip: Boolean(payload.roundTrip),
     pickupAddress: typeof payload.pickupAddress === "string" ? payload.pickupAddress : undefined,

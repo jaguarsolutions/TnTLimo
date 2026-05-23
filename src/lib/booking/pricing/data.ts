@@ -6,6 +6,8 @@
  * boundary (Stripe / DB writes) so the math stays readable here.
  */
 
+import type { LatLng } from "@/lib/geo/service-area";
+
 export const BOOKABLE_SERVICE_CODES = [
   "airport-transfer",
   "point-to-point",
@@ -13,6 +15,9 @@ export const BOOKABLE_SERVICE_CODES = [
 ] as const;
 
 export type BookableServiceCode = (typeof BOOKABLE_SERVICE_CODES)[number];
+
+export const VEHICLE_CATEGORIES = ["sedan", "suv", "van", "sprinter"] as const;
+export type VehicleCategory = (typeof VEHICLE_CATEGORIES)[number];
 
 export const PASSENGER_GROUPS = [
   { label: "1-4 passengers", value: "1-4" },
@@ -43,51 +48,55 @@ export const AIRPORT_OPTIONS = ["SNA", "LAX", "LGB", "BUR", "ONT", "SAN"] as con
 
 export type AirportPricingConfig = {
   distanceMiles: number;
-  rates: {
-    "1-4": number;
-    "5-6": number;
-    "7-10": number;
-    "11-14": number;
-  };
-  perMileAfterBaseline: {
-    "1-4": number;
-    "5-6": number;
-    "7-10": number;
-    "11-14": number;
-  };
+  location: LatLng;
+  rates: Record<VehicleCategory, number>;
+  perMileAfterBaseline: Record<VehicleCategory, number>;
 };
 
 export const AIRPORT_PRICING: Record<(typeof AIRPORT_OPTIONS)[number], AirportPricingConfig> = {
   SNA: {
     distanceMiles: 14,
-    rates: { "1-4": 85, "5-6": 110, "7-10": 145, "11-14": 185 },
-    perMileAfterBaseline: { "1-4": 5, "5-6": 6, "7-10": 8, "11-14": 10 },
+    location: { lat: 33.6757, lng: -117.8682 },
+    rates: { sedan: 85, suv: 110, van: 145, sprinter: 185 },
+    perMileAfterBaseline: { sedan: 5, suv: 6, van: 8, sprinter: 10 },
   },
   LAX: {
     distanceMiles: 34,
-    rates: { "1-4": 175, "5-6": 195, "7-10": 220, "11-14": 320 },
-    perMileAfterBaseline: { "1-4": 5, "5-6": 6, "7-10": 8, "11-14": 10 },
+    location: { lat: 33.9416, lng: -118.4085 },
+    rates: { sedan: 175, suv: 195, van: 220, sprinter: 320 },
+    perMileAfterBaseline: { sedan: 5, suv: 6, van: 8, sprinter: 10 },
   },
   LGB: {
     distanceMiles: 18,
-    rates: { "1-4": 95, "5-6": 120, "7-10": 140, "11-14": 220 },
-    perMileAfterBaseline: { "1-4": 5, "5-6": 6, "7-10": 8, "11-14": 10 },
+    location: { lat: 33.8178, lng: -118.1528 },
+    rates: { sedan: 95, suv: 120, van: 140, sprinter: 220 },
+    perMileAfterBaseline: { sedan: 5, suv: 6, van: 8, sprinter: 10 },
   },
   BUR: {
     distanceMiles: 38,
-    rates: { "1-4": 185, "5-6": 195, "7-10": 235, "11-14": 335 },
-    perMileAfterBaseline: { "1-4": 5, "5-6": 6, "7-10": 8, "11-14": 10 },
+    location: { lat: 34.2007, lng: -118.3587 },
+    rates: { sedan: 185, suv: 195, van: 235, sprinter: 335 },
+    perMileAfterBaseline: { sedan: 5, suv: 6, van: 8, sprinter: 10 },
   },
   ONT: {
     distanceMiles: 40,
-    rates: { "1-4": 185, "5-6": 195, "7-10": 235, "11-14": 335 },
-    perMileAfterBaseline: { "1-4": 5, "5-6": 6, "7-10": 8, "11-14": 10 },
+    location: { lat: 34.0553, lng: -117.6009 },
+    rates: { sedan: 185, suv: 195, van: 235, sprinter: 335 },
+    perMileAfterBaseline: { sedan: 5, suv: 6, van: 8, sprinter: 10 },
   },
   SAN: {
     distanceMiles: 90,
-    rates: { "1-4": 375, "5-6": 425, "7-10": 495, "11-14": 595 },
-    perMileAfterBaseline: { "1-4": 5, "5-6": 6, "7-10": 8, "11-14": 10 },
+    location: { lat: 32.7338, lng: -117.1933 },
+    rates: { sedan: 375, suv: 425, van: 495, sprinter: 595 },
+    perMileAfterBaseline: { sedan: 5, suv: 6, van: 8, sprinter: 10 },
   },
+};
+
+export const HOURLY_VEHICLE_RATES: Record<VehicleCategory, number> = {
+  sedan: 95,
+  suv: 115,
+  van: 155,
+  sprinter: 175,
 };
 
 export const HOURLY_RATES = {
@@ -111,6 +120,17 @@ export const ADD_ON_FEES = {
 
 /** Minimum bookable hours for an hourly charter. */
 export const HOURLY_CHARTER_MIN_HOURS = 4;
+
+export const PASSENGER_GROUP_TO_VEHICLE_ID = {
+  "1-4": "sedan",
+  "5-6": "suv",
+  "7-10": "van",
+  "11-14": "sprinter",
+} as const;
+
+export function vehicleCategoryFromPassengerGroup(group: string): VehicleCategory | null {
+  return (PASSENGER_GROUP_TO_VEHICLE_ID as Record<string, VehicleCategory>)[group] ?? null;
+}
 
 export const SERVICE_LABELS: Record<BookableServiceCode | "disneyland-transportation", string> = {
   "airport-transfer": "Airport Transfer",

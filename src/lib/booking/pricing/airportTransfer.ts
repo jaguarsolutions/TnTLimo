@@ -1,4 +1,4 @@
-import { ADD_ON_FEES, AIRPORT_PRICING } from "./data";
+import { ADD_ON_FEES, AIRPORT_PRICING, vehicleCategoryFromPassengerGroup } from "./data";
 
 export interface AirportTransferQuote {
   /** One-way base fare, in USD. */
@@ -12,12 +12,12 @@ export interface AirportTransferQuote {
 
 /**
  * Pure pricing function for airport transfers. Returns `null` when no rate
- * exists for this airport / passenger group combo (caller should fall back
+ * exists for this airport / vehicle combo (caller should fall back
  * to manual quote flow.
  */
 export function calculateAirportTransferPrice(
   airport: string,
-  passengerGroup: string,
+  vehicleIdOrPassengerGroup: string,
   meetAndGreet: boolean,
   roundTrip: boolean,
   actualDistanceMiles?: number
@@ -25,9 +25,14 @@ export function calculateAirportTransferPrice(
   const airportConfig = AIRPORT_PRICING[airport as keyof typeof AIRPORT_PRICING];
   if (!airportConfig) return null;
 
-  const rateKey = passengerGroup as keyof typeof airportConfig.rates;
-  const baseRate = airportConfig.rates[rateKey] ?? null;
-  if (baseRate === null) return null;
+  const vehicleId =
+    airportConfig.rates[vehicleIdOrPassengerGroup as keyof typeof airportConfig.rates] !== undefined
+      ? (vehicleIdOrPassengerGroup as keyof typeof airportConfig.rates)
+      : vehicleCategoryFromPassengerGroup(vehicleIdOrPassengerGroup);
+
+  if (!vehicleId) return null;
+  const baseRate = airportConfig.rates[vehicleId];
+  if (baseRate === null || baseRate === undefined) return null;
 
   let base = baseRate;
   if (
@@ -36,7 +41,7 @@ export function calculateAirportTransferPrice(
     actualDistanceMiles > airportConfig.distanceMiles
   ) {
     const extraMiles = actualDistanceMiles - airportConfig.distanceMiles;
-    const perMile = airportConfig.perMileAfterBaseline[rateKey];
+    const perMile = airportConfig.perMileAfterBaseline[vehicleId];
     base += Math.round(extraMiles * perMile);
   }
 

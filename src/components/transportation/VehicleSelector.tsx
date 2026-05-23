@@ -3,6 +3,11 @@
 import Image from "next/image";
 import type { Vehicle } from "@/lib/pricing/engine";
 import { SITE_IMAGES } from "@/lib/siteImages";
+import {
+  calculateAirportTransferPrice,
+  calculateHourlyCharterPrice,
+  formatCurrency,
+} from "@/lib/transportationData";
 
 interface VehicleSelectorProps {
   label?: string;
@@ -10,6 +15,12 @@ interface VehicleSelectorProps {
   vehicles: Vehicle[];
   selectedId: string;
   onSelect: (vehicleId: string) => void;
+  /** For airport transfers: the airport code */
+  airport?: string;
+  /** For hourly charters: the number of hours */
+  hours?: number;
+  /** For point-to-point: the distance in miles for pricing */
+  distanceMiles?: number;
 }
 
 const VEHICLE_IMAGE_BY_ID: Record<string, string> = {
@@ -35,7 +46,39 @@ export default function VehicleSelector({
   vehicles,
   selectedId,
   onSelect,
+  airport,
+  hours,
+  distanceMiles,
 }: VehicleSelectorProps) {
+  function getPriceLabel(vehicle: Vehicle): string {
+    // Airport transfer pricing
+    if (airport) {
+      const quote = calculateAirportTransferPrice(airport, vehicle.id, false, false);
+      if (quote) {
+        return `${formatCurrency(quote.base)} base`;
+      }
+    }
+
+    // Hourly charter pricing
+    if (hours !== undefined) {
+      const quote = calculateHourlyCharterPrice(vehicle.id, hours);
+      if (quote) {
+        return `${formatCurrency(quote.rate)}/hr`;
+      }
+    }
+
+    // Point-to-point pricing
+    if (distanceMiles !== undefined && distanceMiles >= 0) {
+      const baseFare = vehicle.baseFare;
+      const mileageFare = vehicle.perMile * distanceMiles;
+      const rawFare = baseFare + mileageFare;
+      const fare = Math.max(vehicle.minimumFare, rawFare);
+      return `${formatCurrency(fare)} for ${distanceMiles.toFixed(1)} mi`;
+    }
+
+    // Fallback: show base structure
+    return `${formatCurrency(vehicle.baseFare)} base · ${formatCurrency(vehicle.minimumFare)} min`;
+  }
   return (
     <div>
       <div className="flex flex-col gap-2">
@@ -72,7 +115,7 @@ export default function VehicleSelector({
                   <div className="min-w-0">
                     <span className="block text-sm font-semibold text-ink">{vehicle.name}</span>
                     <span className="block text-xs text-muted mt-1">Up to {vehicle.maxPassengers} passengers · {vehicle.maxLuggage} bags</span>
-                    <p className="mt-2 text-sm text-muted">${vehicle.perMile}/mile · ${vehicle.minimumFare} minimum</p>
+                    <p className="mt-2 text-sm text-muted">{getPriceLabel(vehicle)}</p>
                     {vehicle.description ? (
                       <span className="block text-xs text-muted/85 mt-1 leading-snug">{vehicle.description}</span>
                     ) : null}

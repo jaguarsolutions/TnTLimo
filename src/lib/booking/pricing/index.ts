@@ -13,11 +13,15 @@ export * from "./pointToPoint";
 export * from "./hourlyCharter";
 
 import type { BookableServiceCode } from "./data";
+import { AIRPORT_PRICING } from "./data";
 import { calculateAirportTransferPrice } from "./airportTransfer";
 import { calculatePointToPointPrice } from "./pointToPoint";
 import { calculateHourlyCharterPrice } from "./hourlyCharter";
 import { resolvePlace } from "@/lib/maps/places";
-import { computeDriveDistanceMiles } from "@/lib/maps/routes";
+import {
+  computeDriveDistanceMiles,
+  computeDriveDistanceMilesFromLocations,
+} from "@/lib/maps/routes";
 import { isWithinServiceArea, POINT_TO_POINT_SERVICE_AREA } from "@/lib/geo/service-area";
 import { lookupFixedRoute } from "@/lib/pricing/fixedRoutes";
 import {
@@ -62,6 +66,8 @@ export interface PricingInput {
   /** Google Place IDs — when present, server can compute custom-route quotes. */
   pickupPlaceId?: string;
   dropoffPlaceId?: string;
+  /** Place ID for the non-airport address in an airport transfer. */
+  otherAddressPlaceId?: string;
   /** Engine vehicle id (towncar, suv) — only used for custom point-to-point routes. */
   vehicleId?: string;
   extraStop?: boolean;
@@ -98,7 +104,7 @@ export function computeBookingPrice(input: PricingInput): ComputedPrice {
     }
     const quote = calculateAirportTransferPrice(
       input.airport,
-      input.passengerGroup,
+      input.vehicleId ?? input.passengerGroup,
       input.meetAndGreet ?? false,
       input.roundTrip ?? false
     );
@@ -118,7 +124,7 @@ export function computeBookingPrice(input: PricingInput): ComputedPrice {
     const quote = calculatePointToPointPrice(
       input.pickupAddress,
       input.dropoffAddress,
-      input.passengerGroup,
+      input.vehicleId ?? input.passengerGroup,
       input.extraStop ?? false
     );
     if (quote.total === null) {
@@ -131,7 +137,7 @@ export function computeBookingPrice(input: PricingInput): ComputedPrice {
   }
 
   // hourly-charter
-  const quote = calculateHourlyCharterPrice(input.passengerGroup, input.hours ?? 0);
+  const quote = calculateHourlyCharterPrice(input.vehicleId ?? input.passengerGroup, input.hours ?? 0);
   if (!quote) {
     return {
       kind: "manual-quote",
@@ -172,6 +178,17 @@ export async function computeBookingPriceAsync(
 ): Promise<ComputedPrice> {
   if (input.passengerGroup === "15+") {
     return { kind: "manual-quote", reason: "Groups over 14 passengers require a custom quote." };
+  }
+
+  // Airport-transfer with a hotel/place ID can also use Google Routes for
+  // actual distance-based pricing, while still falling back to the published
+  // baseline if the live lookup fails.
+  if (
+    input.service === "airport-transfer" &&
+    input.airport &&
+    input.otherAddressPlaceId
+  ) {
+    return computeAirportTransferFromPlaceIds(input);
   }
 
   // Only point-to-point with Place IDs takes the Google path.
@@ -248,4 +265,41 @@ async function computePointToPointFromPlaceIds(
     extraStop: input.extraStop ?? false,
   });
   return finalize(q.base, input.gratuity);
+}
+
+async function computeAirportTransferFromPlaceIds(
+  input: PricingInput
+): Promise<ComputedPrice> {
+  let actualDistanceMiles: number | undefined;
+  const airportConfig = AIRPORT_PRICING[input.airport as keyof typeof AIRPORT_PRICING];
+
+  if (airportConfig) {
+    try {
+      const other = await resolvePlace(input.otherAddressPlaceId!);
+      const { miles } = await computeDriveDistanceMilesFromLocations(
+        airportConfig.location,
+        other.location
+      );
+      actualDistanceMiles = miles;
+    } catch (err) {
+      console.error("[computeBookingPriceAsync] airport distance lookup failed:", err);
+    }
+  }
+
+  const quote = calculateAirportTransferPrice(
+    input.airport!,
+    input.vehicleId ?? input.passengerGroup,
+    input.meetAndGreet ?? false,
+    input.roundTrip ?? false,
+    actualDistanceMiles
+  );
+
+  if (!quote) {
+    return {
+      kind: "manual-quote",
+      reason: "No published rate for that airport / passenger combo.",
+    };
+  }
+
+  return finalize(quote.total + quote.addOns, input.gratuity);
 }

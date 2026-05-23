@@ -9,6 +9,7 @@ import {
   CHILD_SEAT_OPTIONS,
   GRATUITY_OPTIONS,
   HOURLY_RATES,
+  HOURLY_VEHICLE_RATES,
   PASSENGER_GROUPS,
   POINT_TO_POINT_FIXED_ROUTES,
   SERVICE_LABELS,
@@ -264,6 +265,7 @@ export default function TransportationBookingWizard() {
    * Debounced 400ms so rapid edits coalesce into one request.
    */
   type LiveQuote = {
+    service: "point-to-point" | "airport-transfer";
     distanceMiles: number | null;
     vehicle: { id: string; name: string };
     matchedFixedRoute: string | null;
@@ -280,30 +282,55 @@ export default function TransportationBookingWizard() {
   const [quote, setQuote] = useState<QuoteState>({ kind: "idle" });
 
   useEffect(() => {
-    if (state.service !== "point-to-point") {
+    if (state.service !== "point-to-point" && state.service !== "airport-transfer") {
       setQuote({ kind: "idle" });
       return;
     }
-    if (!state.pickupPlaceId || !state.dropoffPlaceId || !state.vehicleId) {
-      setQuote({ kind: "idle" });
-      return;
+
+    if (state.service === "point-to-point") {
+      if (!state.pickupPlaceId || !state.dropoffPlaceId || !state.vehicleId) {
+        setQuote({ kind: "idle" });
+        return;
+      }
+    }
+
+    if (state.service === "airport-transfer") {
+      if (!state.airport || !state.otherAddressPlaceId) {
+        setQuote({ kind: "idle" });
+        return;
+      }
     }
 
     let cancelled = false;
     setQuote({ kind: "loading" });
     const handle = window.setTimeout(async () => {
       try {
+        const payload: Record<string, unknown> = {
+          service: state.service,
+          tripType: state.roundTrip ? "roundtrip" : "oneway",
+          addOns: {},
+        };
+
+        if (state.service === "point-to-point") {
+          payload.pickupPlaceId = state.pickupPlaceId;
+          payload.dropoffPlaceId = state.dropoffPlaceId;
+          payload.vehicleId = state.vehicleId;
+          payload.passengers = passengersFromGroup(state.passengerGroup);
+          payload.addOns = { extraStop: state.extraStop };
+        }
+
+        if (state.service === "airport-transfer") {
+          payload.airport = state.airport;
+          payload.otherAddressPlaceId = state.otherAddressPlaceId;
+          payload.vehicleId = state.vehicleId;
+          payload.passengerGroup = state.passengerGroup;
+          payload.addOns = { meetAndGreet: state.meetAndGreet };
+        }
+
         const res = await fetch("/api/quote", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            pickupPlaceId: state.pickupPlaceId,
-            dropoffPlaceId: state.dropoffPlaceId,
-            vehicleId: state.vehicleId,
-            tripType: "oneway",
-            passengers: passengersFromGroup(state.passengerGroup),
-            addOns: { extraStop: state.extraStop },
-          }),
+          body: JSON.stringify(payload),
         });
         const data = await res.json();
         if (cancelled) return;
@@ -336,6 +363,10 @@ export default function TransportationBookingWizard() {
     state.vehicleId,
     state.extraStop,
     state.passengerGroup,
+    state.airport,
+    state.otherAddressPlaceId,
+    state.roundTrip,
+    state.meetAndGreet,
   ]);
 
   useEffect(() => {
@@ -361,18 +392,48 @@ export default function TransportationBookingWizard() {
 
   const priceSummary = useMemo(() => {
     if (!state.service) {
-      return { basePrice: null as number | null, addOns: 0, gratuity: 0, total: null as number | null, pending: true, routeLabel: null as string | null };
+      return {
+        basePrice: null as number | null,
+        addOns: 0,
+        gratuity: 0,
+        total: null as number | null,
+        pending: true,
+        routeLabel: null as string | null,
+        priceLabel: "Total",
+      };
     }
 
     if (state.service === "airport-transfer") {
+      if (quote.kind === "ok" && quote.data.service === "airport-transfer") {
+        const fromLabel = state.airportDirection === "from-airport" ? state.airport : state.otherAddress || "Hotel/address";
+        const toLabel = state.airportDirection === "from-airport" ? state.otherAddress || "Hotel/address" : state.airport;
+        return {
+          basePrice: quote.data.base,
+          addOns: state.meetAndGreet ? 30 : 0,
+          gratuity: quote.data.gratuity,
+          total: quote.data.total,
+          pending: false,
+          routeLabel: `Starts at ${fromLabel} → ${toLabel}${state.roundTrip ? " (round trip)" : ""}`,
+          priceLabel: "Starts at",
+        };
+      }
+
       const pricing = calculateAirportTransferPrice(
         state.airport,
-        state.passengerGroup,
+        state.vehicleId,
         state.meetAndGreet,
         state.roundTrip,
       );
       if (!pricing) {
-        return { basePrice: null, addOns: 0, gratuity: 0, total: null, pending: true, routeLabel: null };
+        return {
+          basePrice: null,
+          addOns: 0,
+          gratuity: 0,
+          total: null,
+          pending: true,
+          routeLabel: null,
+          priceLabel: "Starts at",
+        };
       }
       const subtotal = pricing.total + pricing.addOns;
       const gratuityAmount =
@@ -384,8 +445,9 @@ export default function TransportationBookingWizard() {
         addOns: pricing.addOns,
         gratuity: gratuityAmount,
         total: subtotal + gratuityAmount,
-        pending: false,
-        routeLabel: `${fromLabel} → ${toLabel}${state.roundTrip ? " (round trip)" : ""}`,
+        pending: quote.kind === "loading",
+        routeLabel: `Starts at ${fromLabel} → ${toLabel}${state.roundTrip ? " (round trip)" : ""}`,
+        priceLabel: "Starts at",
       };
     }
 
@@ -407,6 +469,7 @@ export default function TransportationBookingWizard() {
           total: quote.data.total,
           pending: false,
           routeLabel: label,
+          priceLabel: matched ? "Total" : "Starts at",
         };
       }
       if (quote.kind === "loading") {
@@ -417,6 +480,7 @@ export default function TransportationBookingWizard() {
           total: null as number | null,
           pending: true,
           routeLabel: "Calculating fare…",
+          priceLabel: "Starts at",
         };
       }
       if (quote.kind === "error") {
@@ -427,6 +491,7 @@ export default function TransportationBookingWizard() {
           total: null as number | null,
           pending: true,
           routeLabel: null,
+          priceLabel: "Starts at",
         };
       }
 
@@ -449,12 +514,21 @@ export default function TransportationBookingWizard() {
         total: pricing.total ? pricing.total + gratuityAmount : null,
         pending: pricing.base === null || state.passengerGroup === "15+",
         routeLabel: pricing.routeMatch ?? "Pick pickup and drop-off above for a quote.",
+        priceLabel: pricing.routeMatch ? "Total" : "Starts at",
       };
     }
 
     const pricing = calculateHourlyCharterPrice(state.passengerGroup, state.hours);
     if (!pricing) {
-      return { basePrice: null, addOns: 0, gratuity: 0, total: null, pending: true, routeLabel: "Hourly charter" };
+      return {
+        basePrice: null,
+        addOns: 0,
+        gratuity: 0,
+        total: null,
+        pending: true,
+        routeLabel: "Hourly charter",
+        priceLabel: "Total",
+      };
     }
     const gratuityAmount =
       state.gratuity === "cash" ? 0 : Math.round((pricing.total * Number(state.gratuity)) / 100);
@@ -465,6 +539,7 @@ export default function TransportationBookingWizard() {
       total: pricing.total + gratuityAmount,
       pending: false,
       routeLabel: `${state.hours}-hour charter`,
+      priceLabel: "Total",
     };
   }, [state, quote]);
 
@@ -847,7 +922,7 @@ export default function TransportationBookingWizard() {
       </dl>
 
       <div className="mt-5 border-t border-border pt-4 flex items-center justify-between">
-        <span className="font-display text-lg font-semibold text-ink">Total</span>
+        <span className="font-display text-lg font-semibold text-ink">{priceSummary.priceLabel}</span>
         <AnimatePresence mode="wait" initial={false}>
           <motion.span
             key={priceSummary.total ?? "pending"}
@@ -990,9 +1065,9 @@ export default function TransportationBookingWizard() {
               </svg>
             ),
             priceLabel: priceSummary.basePrice && !state.roundTrip
-              ? formatCurrency(priceSummary.basePrice)
+              ? `Starts at ${formatCurrency(priceSummary.basePrice)}`
               : priceSummary.basePrice && state.roundTrip
-                ? formatCurrency(priceSummary.basePrice / 2)
+                ? `Starts at ${formatCurrency(priceSummary.basePrice / 2)}`
                 : null,
           },
           {
@@ -1005,9 +1080,9 @@ export default function TransportationBookingWizard() {
               </svg>
             ),
             priceLabel: priceSummary.basePrice && !state.roundTrip
-              ? formatCurrency(priceSummary.basePrice)
+              ? `Starts at ${formatCurrency(priceSummary.basePrice)}`
               : priceSummary.basePrice && state.roundTrip
-                ? formatCurrency(priceSummary.basePrice / 2)
+                ? `Starts at ${formatCurrency(priceSummary.basePrice / 2)}`
                 : null,
           },
           {
@@ -1024,8 +1099,8 @@ export default function TransportationBookingWizard() {
             ),
             priceLabel: priceSummary.basePrice
               ? state.roundTrip
-                ? formatCurrency(priceSummary.basePrice)
-                : formatCurrency(priceSummary.basePrice * 2)
+                ? `Total ${formatCurrency(priceSummary.basePrice)}`
+                : `Starts at ${formatCurrency(priceSummary.basePrice * 2)}`
               : null,
           },
         ];
@@ -1325,6 +1400,7 @@ export default function TransportationBookingWizard() {
               vehicles={eligibleVehicles}
               selectedId={state.vehicleId}
               onSelect={(vehicleId) => handleField("vehicleId", vehicleId)}
+              distanceMiles={quote.kind === "ok" ? quote.data.distanceMiles ?? undefined : undefined}
             />
 
             <div className={fieldGroup}>
@@ -1412,7 +1488,10 @@ export default function TransportationBookingWizard() {
               <p className="mt-2 text-xs text-muted">4-hour minimum. Longer days fine — we’ll plan stops with you.</p>
               <p className="mt-2 text-xs text-muted">
                 {(() => {
-                  const hourlyRate = HOURLY_RATES[state.passengerGroup as keyof typeof HOURLY_RATES] ?? 0;
+                  const hourlyRate =
+                    HOURLY_VEHICLE_RATES[state.vehicleId as keyof typeof HOURLY_VEHICLE_RATES] ??
+                    HOURLY_RATES[state.passengerGroup as keyof typeof HOURLY_RATES] ??
+                    0;
                   return `$${hourlyRate}/hr × ${state.hours} hours = ${formatCurrency(
                     hourlyRate * state.hours
                   )}`;
@@ -1506,6 +1585,8 @@ export default function TransportationBookingWizard() {
           vehicles={vehiclesForPassengerCount(passengersFromGroup(state.passengerGroup))}
           selectedId={state.vehicleId}
           onSelect={(vehicleId) => handleField("vehicleId", vehicleId)}
+          airport={state.service === "airport-transfer" ? state.airport : undefined}
+          hours={state.service === "hourly-charter" ? state.hours : undefined}
         />
       )}
 

@@ -23,6 +23,27 @@ interface ComputeRoutesResponse {
   }>;
 }
 
+type PlaceEndpoint = { placeId: string };
+type LocationEndpoint = { location: { lat: number; lng: number } };
+
+type DrivingEndpoint = PlaceEndpoint | LocationEndpoint;
+
+function isPlaceEndpoint(endpoint: DrivingEndpoint): endpoint is PlaceEndpoint {
+  return Object.prototype.hasOwnProperty.call(endpoint, "placeId");
+}
+
+function endpointKey(endpoint: DrivingEndpoint): string {
+  return isPlaceEndpoint(endpoint)
+    ? endpoint.placeId
+    : `${endpoint.location.lat.toFixed(6)},${endpoint.location.lng.toFixed(6)}`;
+}
+
+function endpointRequest(endpoint: DrivingEndpoint): Record<string, unknown> {
+  return isPlaceEndpoint(endpoint)
+    ? { placeId: endpoint.placeId }
+    : { location: { latLng: { latitude: endpoint.location.lat, longitude: endpoint.location.lng } } };
+}
+
 function getServerKey(): string {
   const key = process.env.GOOGLE_MAPS_SERVER_KEY;
   if (!key) {
@@ -48,8 +69,9 @@ interface CacheEntry {
 }
 const cache = new Map<string, CacheEntry>();
 
-function cacheKey(a: string, b: string): string {
-  return [a, b].sort().join("→");
+function cacheKey(a: DrivingEndpoint, b: DrivingEndpoint): string {
+  const keys = [endpointKey(a), endpointKey(b)].sort();
+  return keys.join("→");
 }
 
 /* ── Public API ──────────────────────────────────────────────────────────── */
@@ -63,15 +85,11 @@ export interface RouteDistance {
 /**
  * Compute driving distance (in miles) between two Place IDs.
  */
-export async function computeDriveDistanceMiles(
-  pickupPlaceId: string,
-  dropoffPlaceId: string
+async function computeDriveDistanceMilesInternal(
+  pickup: DrivingEndpoint,
+  dropoff: DrivingEndpoint
 ): Promise<RouteDistance> {
-  if (!pickupPlaceId || !dropoffPlaceId) {
-    throw new Error("Both pickup and dropoff Place IDs are required");
-  }
-
-  const key = cacheKey(pickupPlaceId, dropoffPlaceId);
+  const key = cacheKey(pickup, dropoff);
   const hit = cache.get(key);
   if (hit && hit.expiresAt > Date.now()) {
     return { miles: hit.miles, cached: true };
@@ -86,8 +104,8 @@ export async function computeDriveDistanceMiles(
       "X-Goog-FieldMask": "routes.distanceMeters",
     },
     body: JSON.stringify({
-      origin: { placeId: pickupPlaceId },
-      destination: { placeId: dropoffPlaceId },
+      origin: endpointRequest(pickup),
+      destination: endpointRequest(dropoff),
       travelMode: "DRIVE",
       routingPreference: "TRAFFIC_UNAWARE",
     }),
@@ -108,6 +126,29 @@ export async function computeDriveDistanceMiles(
   const miles = metersToMiles(meters);
   cache.set(key, { miles, expiresAt: Date.now() + CACHE_TTL_MS });
   return { miles, cached: false };
+}
+
+export async function computeDriveDistanceMiles(
+  pickupPlaceId: string,
+  dropoffPlaceId: string
+): Promise<RouteDistance> {
+  if (!pickupPlaceId || !dropoffPlaceId) {
+    throw new Error("Both pickup and dropoff Place IDs are required");
+  }
+  return computeDriveDistanceMilesInternal(
+    { placeId: pickupPlaceId },
+    { placeId: dropoffPlaceId }
+  );
+}
+
+export async function computeDriveDistanceMilesFromLocations(
+  pickupLocation: { lat: number; lng: number },
+  dropoffLocation: { lat: number; lng: number }
+): Promise<RouteDistance> {
+  return computeDriveDistanceMilesInternal(
+    { location: pickupLocation },
+    { location: dropoffLocation }
+  );
 }
 
 /** Test-only — clear the cache between scenarios. */
