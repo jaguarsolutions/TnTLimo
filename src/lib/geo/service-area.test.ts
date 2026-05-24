@@ -65,12 +65,22 @@ describe("isWithinServiceArea (50-mile Anaheim)", () => {
   });
 });
 
-describe("isWithinServiceArea (20-mile point-to-point home base)", () => {
-  it("accepts downtown Los Angeles inside 20 miles", () => {
-    expect(isWithinServiceArea(DOWNTOWN_LA, POINT_TO_POINT_SERVICE_AREA)).toBe(true);
+describe("isWithinServiceArea (20-mile point-to-point pickup area)", () => {
+  it("rejects downtown Los Angeles as a pickup — beyond 20 miles", () => {
+    expect(isWithinServiceArea(DOWNTOWN_LA, POINT_TO_POINT_SERVICE_AREA)).toBe(false);
   });
 
-  it("rejects Santa Monica outside 20 miles", () => {
+  it("rejects Santa Monica as a pickup — beyond 20 miles", () => {
     expect(isWithinServiceArea(SANTA_MONICA, POINT_TO_POINT_SERVICE_AREA)).toBe(false);
+  });
+});
+
+describe("isWithinServiceArea — point-to-point drop-offs use the wider 50-mile area", () => {
+  it("accepts downtown Los Angeles as a drop-off", () => {
+    expect(isWithinServiceArea(DOWNTOWN_LA, SERVICE_AREA)).toBe(true);
+  });
+
+  it("accepts LAX as a drop-off", () => {
+    expect(isWithinServiceArea(LAX, SERVICE_AREA)).toBe(true);
   });
 });

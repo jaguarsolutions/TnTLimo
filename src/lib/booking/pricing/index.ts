@@ -22,7 +22,7 @@ import {
   computeDriveDistanceMiles,
   computeDriveDistanceMilesFromLocations,
 } from "@/lib/maps/routes";
-import { isWithinServiceArea, POINT_TO_POINT_SERVICE_AREA } from "@/lib/geo/service-area";
+import { isWithinServiceArea, POINT_TO_POINT_SERVICE_AREA, SERVICE_AREA } from "@/lib/geo/service-area";
 import { lookupFixedRoute } from "@/lib/pricing/fixedRoutes";
 import {
   computeFixedRouteQuote,
@@ -223,11 +223,18 @@ async function computePointToPointFromPlaceIds(
     return { kind: "manual-quote", reason: "Couldn't resolve those addresses with Google." };
   }
 
-  if (!isWithinServiceArea(pickup.location, POINT_TO_POINT_SERVICE_AREA) ||
-      !isWithinServiceArea(dropoff.location, POINT_TO_POINT_SERVICE_AREA)) {
+  // Pickup must start within 20 miles of the home base; the drop-off may
+  // reach anywhere in the wider 50-mile service area.
+  if (!isWithinServiceArea(pickup.location, POINT_TO_POINT_SERVICE_AREA)) {
     return {
       kind: "manual-quote",
-      reason: "One of the addresses is outside our 20-mile point-to-point service radius.",
+      reason: "Pickup is outside our 20-mile point-to-point pickup area.",
+    };
+  }
+  if (!isWithinServiceArea(dropoff.location, SERVICE_AREA)) {
+    return {
+      kind: "manual-quote",
+      reason: "Drop-off is outside our point-to-point service area.",
     };
   }
 

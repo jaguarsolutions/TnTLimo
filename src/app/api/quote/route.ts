@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { isWithinServiceArea, POINT_TO_POINT_SERVICE_AREA } from "@/lib/geo/service-area";
+import { isWithinServiceArea, POINT_TO_POINT_SERVICE_AREA, SERVICE_AREA } from "@/lib/geo/service-area";
 import { resolvePlace, type ResolvedPlace } from "@/lib/maps/places";
 import {
   computeDriveDistanceMiles,
@@ -119,22 +119,23 @@ export async function POST(request: Request) {
       );
     }
 
-    /* ── 3. Service area check ──────────────────────────────────────────── */
+    /* ── 3. Service area check ──────────────────────────────────────────────
+     * Point-to-point pickups must start within 20 miles of the home base;
+     * the drop-off may reach anywhere in the wider 50-mile service area.
+     * ──────────────────────────────────────────────────────────────────── */
     const pickupInArea = isWithinServiceArea(pickup.location, POINT_TO_POINT_SERVICE_AREA);
-    const dropoffInArea = isWithinServiceArea(dropoff.location, POINT_TO_POINT_SERVICE_AREA);
+    const dropoffInArea = isWithinServiceArea(dropoff.location, SERVICE_AREA);
     if (!pickupInArea || !dropoffInArea) {
+      const offending =
+        !pickupInArea && !dropoffInArea ? "both" : !pickupInArea ? "pickup" : "dropoff";
+      const message =
+        offending === "pickup"
+          ? `Point-to-point pickups need to start within 20 miles of our Anaheim home base. Please call ${SITE_CONTACT.phoneDisplay} — we may still be able to accommodate your pickup.`
+          : offending === "dropoff"
+            ? `That drop-off is outside the area we cover for point-to-point rides. Please call ${SITE_CONTACT.phoneDisplay} — we may be able to accommodate your trip.`
+            : `That trip is outside the area we cover for point-to-point rides. Please call ${SITE_CONTACT.phoneDisplay} — we may be able to accommodate it.`;
       return NextResponse.json(
-        {
-          error: "OUTSIDE_SERVICE_AREA",
-          offending:
-            !pickupInArea && !dropoffInArea
-              ? "both"
-              : !pickupInArea
-                ? "pickup"
-                : "dropoff",
-          message:
-            `We typically service point-to-point rides within 20 miles of our home base. If you’re outside that range, please call ${SITE_CONTACT.phoneDisplay} — we may be able to accommodate your trip.`,
-        },
+        { error: "OUTSIDE_SERVICE_AREA", offending, message },
         { status: 400 }
       );
     }

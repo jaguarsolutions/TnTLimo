@@ -18,7 +18,10 @@ export function calculatePointToPointPrice(
   extraStop: boolean
 ): PointToPointQuote {
   const routeMatch = inferPointToPointRoute(pickup, dropoff);
-  const base = routeMatch ? POINT_TO_POINT_FIXED_ROUTES[routeMatch] : null;
+  // `?? null` guards the case where the substring matcher returns a route
+  // label that has no entry in POINT_TO_POINT_FIXED_ROUTES — without it the
+  // price would be `undefined` and propagate as NaN.
+  const base = routeMatch ? POINT_TO_POINT_FIXED_ROUTES[routeMatch] ?? null : null;
   const addOns = extraStop ? ADD_ON_FEES.extraStop : 0;
   const total = base === null ? null : base + addOns;
   return { routeMatch, base, total, addOns };
