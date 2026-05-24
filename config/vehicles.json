@@ -18,7 +18,7 @@
     "maxLuggage": 6,
     "baseFare": 55,
     "perMile": 6,
-    "minimumFare": 95,
+    "minimumFare": 115,
     "suvMultiplier": 1.0
   },
   {
@@ -29,7 +29,7 @@
     "maxLuggage": 9,
     "baseFare": 70,
     "perMile": 8,
-    "minimumFare": 95,
+    "minimumFare": 155,
     "suvMultiplier": 1.0
   },
   {
@@ -40,7 +40,7 @@
     "maxLuggage": 12,
     "baseFare": 80,
     "perMile": 10,
-    "minimumFare": 95,
+    "minimumFare": 175,
     "suvMultiplier": 1.0
   }
 ]

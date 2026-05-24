@@ -185,6 +185,12 @@ function isValidEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
+function isValidDateTime(value: string) {
+  if (!value || !value.trim()) return false;
+  const time = new Date(value);
+  return !Number.isNaN(time.getTime());
+}
+
 /** Upper-bound seat count for a PASSENGER_GROUPS value like "1-4" or "11-14". */
 function passengersFromGroup(group: string): number {
   if (group === "15+") return 15;
@@ -407,14 +413,17 @@ export default function TransportationBookingWizard() {
       if (quote.kind === "ok" && quote.data.service === "airport-transfer") {
         const fromLabel = state.airportDirection === "from-airport" ? state.airport : state.otherAddress || "Hotel/address";
         const toLabel = state.airportDirection === "from-airport" ? state.otherAddress || "Hotel/address" : state.airport;
+        const basePrice = quote.data.base;
+        const gratuityAmount =
+          state.gratuity === "cash" ? 0 : Math.round((basePrice * Number(state.gratuity)) / 100);
         return {
-          basePrice: quote.data.base,
+          basePrice,
           addOns: state.meetAndGreet ? 30 : 0,
-          gratuity: quote.data.gratuity,
-          total: quote.data.total,
+          gratuity: gratuityAmount,
+          total: basePrice + gratuityAmount,
           pending: false,
           routeLabel: `Starts at ${fromLabel} → ${toLabel}${state.roundTrip ? " (round trip)" : ""}`,
-          priceLabel: "Starts at",
+          priceLabel: "Total",
         };
       }
 
@@ -462,11 +471,14 @@ export default function TransportationBookingWizard() {
           : distance != null
             ? `Custom route · ${distance.toFixed(1)} mi (${quote.data.vehicle.name})`
             : `Custom route (${quote.data.vehicle.name})`;
+        const basePrice = quote.data.base;
+        const gratuityAmount =
+          state.gratuity === "cash" ? 0 : Math.round((basePrice * Number(state.gratuity)) / 100);
         return {
-          basePrice: quote.data.base,
+          basePrice,
           addOns: state.extraStop ? 20 : 0,
-          gratuity: quote.data.gratuity,
-          total: quote.data.total,
+          gratuity: gratuityAmount,
+          total: basePrice + gratuityAmount,
           pending: false,
           routeLabel: label,
           priceLabel: matched ? "Total" : "Starts at",
@@ -518,7 +530,7 @@ export default function TransportationBookingWizard() {
       };
     }
 
-    const pricing = calculateHourlyCharterPrice(state.passengerGroup, state.hours);
+    const pricing = calculateHourlyCharterPrice(state.vehicleId || state.passengerGroup, state.hours);
     if (!pricing) {
       return {
         basePrice: null,
@@ -558,17 +570,33 @@ export default function TransportationBookingWizard() {
     setHighestStep((current) => Math.max(current, target));
   };
 
+  function formatMissingFields(items: string[]) {
+    if (items.length === 1) return items[0];
+    if (items.length === 2) return `${items[0]} and ${items[1]}`;
+    const last = items[items.length - 1];
+    return `${items.slice(0, -1).join(", ")}, and ${last}`;
+  }
+
   function validateStep(currentStep: number): string | null {
     if (currentStep === 1) {
       if (!state.service) return "Please choose a transportation service to continue.";
     }
     if (currentStep === 2) {
       if (state.service === "airport-transfer") {
-        if (!state.airport || !state.otherAddress || !state.flightTime) {
-          return "Please choose an airport, enter the hotel/address, and add the flight time.";
+        const missing: string[] = [];
+        if (!state.airport) missing.push("an airport");
+        if (!state.otherAddress) missing.push("the hotel/address");
+        if (!isValidDateTime(state.flightTime)) {
+          const flightLabel = state.roundTrip || state.airportDirection === "from-airport"
+            ? "arrival flight time"
+            : "departure flight time";
+          missing.push(`your ${flightLabel}`);
         }
-        if (state.roundTrip && !state.returnFlightTime) {
-          return "For a round trip, please add the return departure time too.";
+        if (missing.length > 0) {
+          return `Please enter ${formatMissingFields(missing)}.`;
+        }
+        if (state.roundTrip && !isValidDateTime(state.returnFlightTime)) {
+          return "For a round trip, please add the return departure time.";
         }
       }
       if (state.service === "point-to-point") {
@@ -605,17 +633,28 @@ export default function TransportationBookingWizard() {
       if (state.luggageCount < 0) return "Luggage count can’t be negative.";
     }
     if (currentStep === 4) {
-      if (!state.firstName.trim() || !state.lastName.trim()) return "Please add your first and last name.";
-      if (!isValidEmail(state.email)) return "Please enter a valid email address.";
-      if (!isValidPhone(state.phone)) return "Please enter a valid phone number.";
+      const missing: string[] = [];
+      if (!state.firstName.trim() || !state.lastName.trim()) missing.push("your first and last name");
+      if (!isValidEmail(state.email)) missing.push("a valid email address");
+      if (!isValidPhone(state.phone)) missing.push("a valid phone number");
+      if (missing.length > 0) {
+        return `Please enter ${formatMissingFields(missing)}.`;
+      }
     }
     return null;
   }
+
+  const scrollToTop = () => {
+    if (stepHeaderRef.current) {
+      stepHeaderRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  };
 
   const handleNext = () => {
     const err = validateStep(step);
     if (err) {
       setError(err);
+      scrollToTop();
       return;
     }
     setError("");
@@ -719,6 +758,7 @@ export default function TransportationBookingWizard() {
       const pickupAtIso = computePickupIso();
       if (!pickupAtIso) {
         setError("Pickup date/time is missing.");
+        scrollToTop();
         setSubmitStatus("error");
         return;
       }

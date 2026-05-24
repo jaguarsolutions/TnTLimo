@@ -340,6 +340,10 @@ function applyInputStyling(element: HTMLElement): void {
         "text-sm",
         "text-ink"
       );
+      input.style.backgroundColor = "#ffffff";
+      input.style.color = "#111827";
+      input.style.caretColor = "#111827";
+      input.style.outline = "none";
     }
   });
 }
