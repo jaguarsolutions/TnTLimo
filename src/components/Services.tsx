@@ -19,7 +19,7 @@ const services = [
       "Hotel pickup from Anaheim included",
       "Hollywood, Beverly Hills, Griffith Park & coast",
       "Small group — never a crowded bus",
-      "Typical pickup 8:00–8:15 AM · Return ~5:00 PM",
+      "Typical pickup 7:45–8:00 AM · Return 5:30–6:00 PM",
     ],
     badges: ["Hotel Pickup", "Small Group", "Local Guide"],
     duration: "Full day",

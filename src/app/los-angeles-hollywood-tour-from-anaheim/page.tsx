@@ -87,7 +87,7 @@ export default function LAHollywoodTourPage() {
             },
             {
               question: "How long is the tour?",
-              answer: "Pickup from Anaheim and neighboring cities is typically between 8:00 and 8:15 AM, with return to Anaheim around 5:00 PM — a full day on the road. We'll cover a lot of ground while still giving you time at each stop.",
+              answer: "Pickup from Anaheim and neighboring cities is typically between 7:45 and 8:00 AM, with return to Anaheim between 5:30 and 6:00 PM — a full day on the road. We'll cover a lot of ground while still giving you time at each stop.",
             },
             {
               question: "What stops are included?",

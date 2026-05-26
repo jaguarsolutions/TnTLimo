@@ -42,7 +42,7 @@ const stops = [
 ];
 
 const included = [
-  { icon: "📍", label: "Hotel pickup from Anaheim area (typically 8:00–8:15 AM)" },
+  { icon: "📍", label: "Hotel pickup from Anaheim area (typically 7:45–8:00 AM)" },
   { icon: "🎤", label: "Expert local guide throughout" },
   { icon: "🚐", label: "Comfortable air-conditioned vehicle" },
   { icon: "🏙️", label: "Downtown LA pass-by — Disney Concert Hall, Music Center, Crypto.com Arena area" },
@@ -51,7 +51,7 @@ const included = [
   { icon: "🌆", label: "Sunset Strip & Beverly Hills / Rodeo Drive" },
   { icon: "🥙", label: "Lunch stop — Original Farmers Market & The Grove" },
   { icon: "🎡", label: "Santa Monica Pier, Venice Beach & Marina del Rey" },
-  { icon: "🕐", label: "Return to Anaheim around 5:00 PM (typical full day)" },
+  { icon: "🕐", label: "Return to Anaheim between 5:30 and 6:00 PM (typical full day)" },
 ];
 
 const whyChoose = [
