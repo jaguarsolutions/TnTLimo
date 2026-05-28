@@ -4,9 +4,14 @@
  *
  * All values are whole-dollar USD. Conversion to cents happens at the
  * boundary (Stripe / DB writes) so the math stays readable here.
+ *
+ * The vehicle pricing is now sourced from `@/lib/pricing/engine` (which loads
+ * `config/vehicles.json`). The per-airport tables here only carry baseline
+ * distance + lat/lng for the Routes-API distance lookup.
  */
 
 import type { LatLng } from "@/lib/geo/service-area";
+import { VEHICLES } from "@/lib/pricing/engine";
 
 export const BOOKABLE_SERVICE_CODES = [
   "airport-transfer",
@@ -47,67 +52,37 @@ export const GRATUITY_OPTIONS = [
 export const AIRPORT_OPTIONS = ["SNA", "LAX", "LGB", "BUR", "ONT", "SAN"] as const;
 
 export type AirportPricingConfig = {
+  /** Default driving distance from the airport to Anaheim home base. Used when Routes API is unavailable. */
   distanceMiles: number;
   location: LatLng;
-  rates: Record<VehicleCategory, number>;
-  perMileAfterBaseline: Record<VehicleCategory, number>;
 };
 
 export const AIRPORT_PRICING: Record<(typeof AIRPORT_OPTIONS)[number], AirportPricingConfig> = {
-  SNA: {
-    distanceMiles: 14,
-    location: { lat: 33.6757, lng: -117.8682 },
-    rates: { sedan: 85, suv: 110, van: 145, sprinter: 185 },
-    perMileAfterBaseline: { sedan: 5, suv: 6, van: 8, sprinter: 10 },
-  },
-  LAX: {
-    distanceMiles: 34,
-    location: { lat: 33.9416, lng: -118.4085 },
-    rates: { sedan: 175, suv: 195, van: 220, sprinter: 320 },
-    perMileAfterBaseline: { sedan: 5, suv: 6, van: 8, sprinter: 10 },
-  },
-  LGB: {
-    distanceMiles: 18,
-    location: { lat: 33.8178, lng: -118.1528 },
-    rates: { sedan: 95, suv: 120, van: 140, sprinter: 220 },
-    perMileAfterBaseline: { sedan: 5, suv: 6, van: 8, sprinter: 10 },
-  },
-  BUR: {
-    distanceMiles: 38,
-    location: { lat: 34.2007, lng: -118.3587 },
-    rates: { sedan: 185, suv: 195, van: 235, sprinter: 335 },
-    perMileAfterBaseline: { sedan: 5, suv: 6, van: 8, sprinter: 10 },
-  },
-  ONT: {
-    distanceMiles: 40,
-    location: { lat: 34.0553, lng: -117.6009 },
-    rates: { sedan: 185, suv: 195, van: 235, sprinter: 335 },
-    perMileAfterBaseline: { sedan: 5, suv: 6, van: 8, sprinter: 10 },
-  },
-  SAN: {
-    distanceMiles: 90,
-    location: { lat: 32.7338, lng: -117.1933 },
-    rates: { sedan: 375, suv: 425, van: 495, sprinter: 595 },
-    perMileAfterBaseline: { sedan: 5, suv: 6, van: 8, sprinter: 10 },
-  },
+  SNA: { distanceMiles: 14, location: { lat: 33.6757, lng: -117.8682 } },
+  LAX: { distanceMiles: 34, location: { lat: 33.9416, lng: -118.4085 } },
+  LGB: { distanceMiles: 18, location: { lat: 33.8178, lng: -118.1528 } },
+  BUR: { distanceMiles: 45, location: { lat: 34.2007, lng: -118.3587 } },
+  ONT: { distanceMiles: 35, location: { lat: 34.0553, lng: -117.6009 } },
+  SAN: { distanceMiles: 95, location: { lat: 32.7338, lng: -117.1933 } },
 };
 
+/** Hourly rates exposed for the Hourly Charter rates card. Sourced from engine vehicle config. */
 export const HOURLY_VEHICLE_RATES: Record<VehicleCategory, number> = {
-  sedan: 95,
-  suv: 115,
-  van: 155,
-  sprinter: 175,
+  sedan: vehicleRate("sedan"),
+  suv: vehicleRate("suv"),
+  van: vehicleRate("van"),
+  sprinter: vehicleRate("sprinter"),
 };
 
 export const HOURLY_RATES = {
-  "1-4": 95,
-  "5-6": 115,
-  "7-10": 155,
-  "11-14": 175,
+  "1-4": vehicleRate("sedan"),
+  "5-6": vehicleRate("suv"),
+  "7-10": vehicleRate("van"),
+  "11-14": vehicleRate("sprinter"),
 } as const;
 
 export const POINT_TO_POINT_FIXED_ROUTES: Record<string, number> = {
-  "Anaheim to SNA": 95,
+  "Anaheim to SNA": 105,
   "Anaheim to Universal Studios": 120,
   "Anaheim to Downtown LA": 150,
 };
@@ -117,9 +92,6 @@ export const ADD_ON_FEES = {
   meetAndGreet: 30,
   extraStop: 20,
 } as const;
-
-/** Minimum bookable hours for an hourly charter. */
-export const HOURLY_CHARTER_MIN_HOURS = 4;
 
 export const PASSENGER_GROUP_TO_VEHICLE_ID = {
   "1-4": "sedan",
@@ -138,3 +110,8 @@ export const SERVICE_LABELS: Record<BookableServiceCode | "disneyland-transporta
   "point-to-point": "Point-to-Point Transportation",
   "hourly-charter": "Hourly Charter Service",
 };
+
+function vehicleRate(id: VehicleCategory): number {
+  const v = VEHICLES.find((x) => x.id === id);
+  return v?.hourlyRate ?? 0;
+}

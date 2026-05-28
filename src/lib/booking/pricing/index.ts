@@ -141,7 +141,7 @@ export function computeBookingPrice(input: PricingInput): ComputedPrice {
   if (!quote) {
     return {
       kind: "manual-quote",
-      reason: "Hourly charter has a 4-hour minimum and requires a valid passenger group.",
+      reason: "Hourly charter requires a valid passenger group and a non-negative hours value.",
     };
   }
   return finalize(quote.total, input.gratuity);
@@ -223,12 +223,11 @@ async function computePointToPointFromPlaceIds(
     return { kind: "manual-quote", reason: "Couldn't resolve those addresses with Google." };
   }
 
-  // Pickup must start within 20 miles of the home base; the drop-off may
-  // reach anywhere in the wider 50-mile service area.
+  // Pickup must start within the published P2P service radius (see config/point-to-point-service-area.json).
   if (!isWithinServiceArea(pickup.location, POINT_TO_POINT_SERVICE_AREA)) {
     return {
       kind: "manual-quote",
-      reason: "Pickup is outside our 20-mile point-to-point pickup area.",
+      reason: `Pickup is outside our ${POINT_TO_POINT_SERVICE_AREA.radiusMiles}-mile point-to-point pickup area.`,
     };
   }
   if (!isWithinServiceArea(dropoff.location, SERVICE_AREA)) {

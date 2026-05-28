@@ -6,6 +6,12 @@ import vehiclesConfig from "@/../config/vehicles.json";
  *
  * Edit `config/vehicles.json` to tune rates; tests in `engine.test.ts` will
  * fail if the formulas drift away from the published reference rows.
+ *
+ * Pricing formula (unified across Point-to-Point, Airport, Hourly):
+ *
+ *   point-to-point one-way: base + perMile × max(0, miles - INCLUDED_MILES)
+ *   airport one-way:        point-to-point + AIRPORT_SERVICE_FEE
+ *   hourly:                 hourlyRate × max(hourlyMinHours, hours)
  */
 
 export interface Vehicle {
@@ -16,7 +22,10 @@ export interface Vehicle {
   maxLuggage: number;
   baseFare: number;
   perMile: number;
+  /** Retained for backward compatibility with older configs. New formula doesn't need a clamp — base IS the minimum. */
   minimumFare: number;
+  hourlyRate: number;
+  hourlyMinHours: number;
   /** Reserved for future SUV-class surcharges. Set to 1.0 to disable. */
   suvMultiplier: number;
 }
@@ -61,6 +70,14 @@ export interface Quote {
 
 /* ── Constants ─────────────────────────────────────────────────────────── */
 
+/** Miles included in the vehicle's base fare — extra miles bill at `perMile`. */
+export const INCLUDED_MILES = 25;
+/** Outer service radius (miles from home base). Used for quote eligibility. */
+export const SERVICE_RADIUS_MILES = 150;
+/** Flat per-leg fee added to every airport transfer leg. */
+export const AIRPORT_SERVICE_FEE = 10;
+/** Meet & Greet add-on for airport pickups. */
+export const MEET_GREET_FEE = 30;
 export const EXTRA_STOP_FEE = 20;
 export const GRATUITY_RATE = 0.2;
 /** 5% round-trip discount: round_trip_fare = one_way * 1.9 (instead of 2.0) */
@@ -68,16 +85,19 @@ export const ROUND_TRIP_MULTIPLIER = 1.9;
 
 /* ── Core math ─────────────────────────────────────────────────────────── */
 
-/** Pre-add-on one-way fare with mileage and minimum-fare floor applied. */
+/**
+ * Pre-add-on one-way fare. First INCLUDED_MILES are bundled into the base;
+ * anything beyond is billed at the vehicle's per-mile rate.
+ */
 function oneWayFare(vehicle: Vehicle, distanceMiles: number): number {
-  const rawDistanceFare = vehicle.baseFare + vehicle.perMile * distanceMiles;
-  return Math.max(vehicle.minimumFare, rawDistanceFare) * vehicle.suvMultiplier;
+  const extraMiles = Math.max(0, distanceMiles - INCLUDED_MILES);
+  return (vehicle.baseFare + vehicle.perMile * extraMiles) * vehicle.suvMultiplier;
 }
 
 /**
  * Run a quote through the engine.
  *
- *   one_way_fare = max(minimumFare, baseFare + perMile * distanceMiles)
+ *   one_way_fare = base + perMile * max(0, distanceMiles - INCLUDED_MILES)
  *   round_trip_fare = one_way_fare * 1.9   (5% discount vs. 2x)
  *   add_on_total = extraStop ? 20 : 0
  *   base = (round_trip_fare or one_way_fare) + add_on_total
@@ -96,22 +116,19 @@ export function computeQuote(input: QuoteInput): Quote {
   const addOns = extraStop ? EXTRA_STOP_FEE : 0;
   const baseExact = trip + addOns;
 
-  // Build a human-readable breakdown that always reconciles to the rounded base.
   const breakdown: QuoteLine[] = [];
+  const extraMiles = Math.max(0, distanceMiles - INCLUDED_MILES);
 
   if (tripType === "roundtrip") {
     breakdown.push({ label: `Round trip (${vehicle.name}, ${distanceMiles.toFixed(1)} mi)`, amount: round(trip) });
+  } else if (extraMiles === 0) {
+    breakdown.push({ label: `Base (${vehicle.name}, up to ${INCLUDED_MILES} mi)`, amount: vehicle.baseFare });
   } else {
-    if (oneWay > vehicle.baseFare + vehicle.perMile * distanceMiles) {
-      // Minimum fare clamp engaged
-      breakdown.push({ label: `Minimum fare (${vehicle.name})`, amount: round(oneWay) });
-    } else {
-      breakdown.push({ label: "Base fare", amount: vehicle.baseFare });
-      breakdown.push({
-        label: `Mileage (${distanceMiles.toFixed(1)} mi × $${vehicle.perMile.toFixed(2)})`,
-        amount: round(vehicle.perMile * distanceMiles),
-      });
-    }
+    breakdown.push({ label: `Base (${vehicle.name}, up to ${INCLUDED_MILES} mi)`, amount: vehicle.baseFare });
+    breakdown.push({
+      label: `Mileage (${extraMiles.toFixed(1)} mi × $${vehicle.perMile.toFixed(2)})`,
+      amount: round(vehicle.perMile * extraMiles),
+    });
   }
 
   if (extraStop) {
@@ -169,6 +186,105 @@ export function computeFixedRouteQuote(args: {
     breakdown,
     oneWayFareExact: fixedRoutePrice,
   };
+}
+
+/* ── Airport-transfer helpers ─────────────────────────────────────────── */
+
+export interface AirportQuoteInput {
+  vehicle: Vehicle;
+  miles: number;
+  tripType: TripType;
+  meetGreet?: boolean;
+  includeAirportFee?: boolean;
+}
+
+/**
+ * Airport-transfer base fare. Uses the same distance formula as P2P, plus a
+ * flat per-leg `AIRPORT_SERVICE_FEE`. Round trip multiplies the per-leg
+ * fare; Meet & Greet is a one-time add-on regardless of trip type.
+ */
+export function computeAirportQuote(input: AirportQuoteInput): Quote {
+  const { vehicle, miles, tripType, meetGreet = false, includeAirportFee = true } = input;
+  if (!Number.isFinite(miles) || miles < 0) {
+    throw new Error("miles must be a non-negative finite number");
+  }
+
+  const oneWay = oneWayFare(vehicle, miles) + (includeAirportFee ? AIRPORT_SERVICE_FEE : 0);
+  const trip = tripType === "roundtrip" ? oneWay * ROUND_TRIP_MULTIPLIER : oneWay;
+  const meetGreetFee = meetGreet ? MEET_GREET_FEE : 0;
+  const baseExact = trip + meetGreetFee;
+
+  const breakdown: QuoteLine[] = [];
+  breakdown.push({
+    label:
+      tripType === "roundtrip"
+        ? `Round trip airport (${vehicle.name}, ${miles.toFixed(1)} mi)`
+        : `Airport transfer (${vehicle.name}, ${miles.toFixed(1)} mi)`,
+    amount: round(trip),
+  });
+  if (meetGreet) {
+    breakdown.push({ label: "Meet & greet", amount: MEET_GREET_FEE });
+  }
+
+  const base = round(baseExact);
+  const gratuity = round(baseExact * GRATUITY_RATE);
+  return {
+    base,
+    gratuity,
+    total: base + gratuity,
+    breakdown,
+    oneWayFareExact: oneWay,
+  };
+}
+
+/* ── Hourly-charter helpers ───────────────────────────────────────────── */
+
+export interface HourlyQuoteInput {
+  vehicle: Vehicle;
+  hours: number;
+}
+
+export interface HourlyQuote extends Quote {
+  /** The hours actually billed (floored at vehicle.hourlyMinHours). */
+  billedHours: number;
+}
+
+/**
+ * Hourly-charter base fare. Floors `hours` at the vehicle's
+ * `hourlyMinHours` so a 2-hr request on a sedan still bills the 3-hr min.
+ */
+export function computeHourlyQuote(input: HourlyQuoteInput): HourlyQuote {
+  const { vehicle, hours } = input;
+  if (!Number.isFinite(hours) || hours < 0) {
+    throw new Error("hours must be a non-negative finite number");
+  }
+
+  const billedHours = Math.max(vehicle.hourlyMinHours, Math.floor(hours));
+  const baseExact = billedHours * vehicle.hourlyRate;
+
+  const breakdown: QuoteLine[] = [
+    {
+      label: `${vehicle.name} · ${billedHours} hr × $${vehicle.hourlyRate}/hr`,
+      amount: baseExact,
+    },
+  ];
+
+  const base = round(baseExact);
+  const gratuity = round(baseExact * GRATUITY_RATE);
+  return {
+    base,
+    gratuity,
+    total: base + gratuity,
+    breakdown,
+    oneWayFareExact: baseExact,
+    billedHours,
+  };
+}
+
+/* ── Service area helper ──────────────────────────────────────────────── */
+
+export function isWithinServiceRadius(miles: number): boolean {
+  return Number.isFinite(miles) && miles >= 0 && miles <= SERVICE_RADIUS_MILES;
 }
 
 function round(value: number): number {

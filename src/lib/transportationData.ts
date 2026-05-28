@@ -55,7 +55,7 @@ export const TRANSPORTATION_SERVICES = [
     code: "hourly-charter" as const,
     title: "Hourly Charter",
     description:
-      "Reserve a private vehicle and driver by the hour for events, shopping, sightseeing, business travel, or multiple stops.",
+      "Reserve a private vehicle and driver by the hour for events, shopping, sightseeing, business travel, or multiple stops. Unlimited miles within Greater LA & Orange County.",
     highlight: "Custom timing, private vehicles, and free child seats on request.",
     image: SITE_IMAGES.santaMonicaPalms,
     imageAlt: "Hourly charter service with scenic California palm trees",

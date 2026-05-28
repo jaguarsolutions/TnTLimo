@@ -5,9 +5,11 @@
     "description": "Black luxury sedan — 1–4 passengers, perfect for couples and small families.",
     "maxPassengers": 4,
     "maxLuggage": 3,
-    "baseFare": 50,
-    "perMile": 5,
+    "baseFare": 95,
+    "perMile": 2.5,
     "minimumFare": 95,
+    "hourlyRate": 100,
+    "hourlyMinHours": 3,
     "suvMultiplier": 1.0
   },
   {
@@ -16,9 +18,11 @@
     "description": "Premium black SUV — 5–6 passengers with extra luggage room.",
     "maxPassengers": 6,
     "maxLuggage": 6,
-    "baseFare": 55,
-    "perMile": 6,
-    "minimumFare": 115,
+    "baseFare": 110,
+    "perMile": 3.0,
+    "minimumFare": 110,
+    "hourlyRate": 120,
+    "hourlyMinHours": 3,
     "suvMultiplier": 1.0
   },
   {
@@ -27,9 +31,11 @@
     "description": "Spacious black van — 7–10 passengers and luggage for family groups.",
     "maxPassengers": 10,
     "maxLuggage": 9,
-    "baseFare": 70,
-    "perMile": 8,
-    "minimumFare": 155,
+    "baseFare": 145,
+    "perMile": 4.0,
+    "minimumFare": 145,
+    "hourlyRate": 155,
+    "hourlyMinHours": 4,
     "suvMultiplier": 1.0
   },
   {
@@ -38,9 +44,11 @@
     "description": "Executive black sprinter — 11–14 passengers with premium group comfort.",
     "maxPassengers": 14,
     "maxLuggage": 12,
-    "baseFare": 80,
-    "perMile": 10,
-    "minimumFare": 175,
+    "baseFare": 185,
+    "perMile": 5.0,
+    "minimumFare": 185,
+    "hourlyRate": 185,
+    "hourlyMinHours": 4,
     "suvMultiplier": 1.0
   }
 ]
