@@ -28,7 +28,7 @@ export const runtime = "nodejs";
  * Flow:
  *   1. Validate payload (zod).
  *   2. Resolve both Place IDs to lat/lng via Places API.
- *   3. Reject if either point is outside the 20-mile home base service area.
+ *   3. Reject if either point is outside the home base service area (see config/*-service-area.json).
  *   4. If both endpoints match one of the four published anchor pairs,
  *      return the fixed price (skip Routes API).
  *   5. Otherwise call Routes API, run distance through the pricing engine.
@@ -120,17 +120,18 @@ export async function POST(request: Request) {
     }
 
     /* ── 3. Service area check ──────────────────────────────────────────────
-     * Point-to-point pickups must start within 20 miles of the home base;
-     * the drop-off may reach anywhere in the wider 50-mile service area.
+     * Point-to-point pickups and drop-offs must sit inside our published
+     * service radius (see config/*-service-area.json — currently 150 mi).
      * ──────────────────────────────────────────────────────────────────── */
     const pickupInArea = isWithinServiceArea(pickup.location, POINT_TO_POINT_SERVICE_AREA);
     const dropoffInArea = isWithinServiceArea(dropoff.location, SERVICE_AREA);
     if (!pickupInArea || !dropoffInArea) {
       const offending =
         !pickupInArea && !dropoffInArea ? "both" : !pickupInArea ? "pickup" : "dropoff";
+      const radius = POINT_TO_POINT_SERVICE_AREA.radiusMiles;
       const message =
         offending === "pickup"
-          ? `Point-to-point pickups need to start within 20 miles of our Anaheim home base. Please call ${SITE_CONTACT.phoneDisplay} — we may still be able to accommodate your pickup.`
+          ? `Point-to-point pickups need to start within ${radius} miles of our Anaheim home base. Please call ${SITE_CONTACT.phoneDisplay} — we may still be able to accommodate your pickup.`
           : offending === "dropoff"
             ? `That drop-off is outside the area we cover for point-to-point rides. Please call ${SITE_CONTACT.phoneDisplay} — we may be able to accommodate your trip.`
             : `That trip is outside the area we cover for point-to-point rides. Please call ${SITE_CONTACT.phoneDisplay} — we may be able to accommodate it.`;
