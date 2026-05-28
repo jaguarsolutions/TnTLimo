@@ -1151,7 +1151,6 @@ export default function TransportationBookingWizard() {
           title: string;
           hint: string;
           icon: React.ReactNode;
-          priceLabel: string | null;
         }> = [
           {
             value: "pickup",
@@ -1162,11 +1161,6 @@ export default function TransportationBookingWizard() {
                 <path d="M21 16v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1L15 22v-1.5L13 19v-5.5z" />
               </svg>
             ),
-            priceLabel: priceSummary.basePrice && !state.roundTrip
-              ? `Starts at ${formatCurrency(priceSummary.basePrice)}`
-              : priceSummary.basePrice && state.roundTrip
-                ? `Starts at ${formatCurrency(priceSummary.basePrice / 2)}`
-                : null,
           },
           {
             value: "dropoff",
@@ -1177,11 +1171,6 @@ export default function TransportationBookingWizard() {
                 <path d="M21 16v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1L15 22v-1.5L13 19v-5.5z" />
               </svg>
             ),
-            priceLabel: priceSummary.basePrice && !state.roundTrip
-              ? `Starts at ${formatCurrency(priceSummary.basePrice)}`
-              : priceSummary.basePrice && state.roundTrip
-                ? `Starts at ${formatCurrency(priceSummary.basePrice / 2)}`
-                : null,
           },
           {
             value: "round-trip",
@@ -1195,11 +1184,6 @@ export default function TransportationBookingWizard() {
                 <path d="M3 21v-5h5" />
               </svg>
             ),
-            priceLabel: priceSummary.basePrice
-              ? state.roundTrip
-                ? `Total ${formatCurrency(priceSummary.basePrice)}`
-                : `Starts at ${formatCurrency(priceSummary.basePrice * 2)}`
-              : null,
           },
         ];
 
@@ -1260,15 +1244,6 @@ export default function TransportationBookingWizard() {
                         <span className="block text-sm font-semibold text-ink">{option.title}</span>
                         <span className="block text-xs text-muted mt-0.5 leading-snug">{option.hint}</span>
                       </div>
-                      {option.priceLabel && (
-                        <span
-                          className={`mt-1 font-display text-sm font-semibold tabular-nums ${
-                            selected ? "text-ink" : "text-muted"
-                          }`}
-                        >
-                          {option.priceLabel}
-                        </span>
-                      )}
                     </button>
                   );
                 })}
