@@ -3,6 +3,7 @@ import { publicUrl } from "@/lib/publicPath";
 
 export const SITE_IMAGES = {
   hero: publicUrl("/images/site/hero-los-angeles-twilight.jpg"),
+  heroSuvAnaheim: publicUrl("/images/site/hero-suv-anaheim.jpg"),
   walkOfFameStar: publicUrl("/images/site/walk-of-fame-disney-star.jpg"),
   griffithSunsetAerial: publicUrl("/images/site/griffith-observatory-sunset-aerial.jpg"),
   beverlyHillsSign: publicUrl("/images/site/beverly-hills-sign.jpg"),

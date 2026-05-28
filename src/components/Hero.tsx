@@ -3,19 +3,177 @@
 import { motion, useReducedMotion, useScroll, useTransform } from "framer-motion";
 import Image from "next/image";
 import Link from "next/link";
-import { useRef } from "react";
-import Logo from "@/components/Logo";
+import { useEffect, useRef, useState } from "react";
 import { SITE_IMAGES } from "@/lib/siteImages";
 
+type Row = {
+  title: string;
+  subtitle: string;
+  href: string;
+  cta: string;
+  icon?: React.ReactNode;
+  thumb?: string;
+};
+
+const transportationRows: Row[] = [
+  {
+    title: "Airport Transfers",
+    subtitle: "LAX, SNA, LGB & more",
+    href: "/transportation/airport-transfer",
+    cta: "Book Now",
+    icon: (
+      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8} aria-hidden="true">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M3.5 19h17M10 5l1-1.5h2L14 5l5 4v3l-9-2-3 4H4l1.5-3L4 9l3-1 3-3z" />
+      </svg>
+    ),
+  },
+  {
+    title: "Hourly Charter",
+    subtitle: "By the hour, on your schedule",
+    href: "/transportation/hourly-charter",
+    cta: "Book Now",
+    icon: (
+      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8} aria-hidden="true">
+        <circle cx="12" cy="12" r="9" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 7v5l3 2" />
+      </svg>
+    ),
+  },
+  {
+    title: "Point to Point",
+    subtitle: "Direct rides to any destination",
+    href: "/transportation/point-to-point",
+    cta: "Book Now",
+    icon: (
+      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8} aria-hidden="true">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+        <circle cx="12" cy="11" r="2.5" />
+      </svg>
+    ),
+  },
+];
+
+const tourRows: Row[] = [
+  {
+    title: "Best of Los Angeles & Hollywood",
+    subtitle: "See LA's most iconic sights",
+    href: "/los-angeles-hollywood-tour-from-anaheim",
+    cta: "Book Tour",
+    thumb: SITE_IMAGES.hollywoodSignHills,
+  },
+  {
+    title: "Private Tour LA",
+    subtitle: "Your LA. Your way.",
+    href: "/private-los-angeles-tour",
+    cta: "Book Tour",
+    thumb: SITE_IMAGES.griffithSunsetAerial,
+  },
+  {
+    title: "Universal Studios",
+    subtitle: "Stress-free transportation from Anaheim",
+    href: "/universal-studios-transportation-anaheim",
+    cta: "Book Tour",
+    thumb: SITE_IMAGES.universalGlobe,
+  },
+];
+
 const Stars = () => (
-  <div className="flex gap-1" aria-hidden="true">
+  <div className="flex gap-0.5" aria-hidden="true">
     {[...Array(5)].map((_, i) => (
-      <svg key={i} className="w-4 h-4 fill-gold" viewBox="0 0 20 20">
+      <svg key={i} className="w-3.5 h-3.5 fill-gold" viewBox="0 0 20 20">
         <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
       </svg>
     ))}
   </div>
 );
+
+const ChevronRight = () => (
+  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5} aria-hidden="true">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+  </svg>
+);
+
+function BookingCard({
+  eyebrowIcon,
+  title,
+  subtitle,
+  rows,
+  variant,
+}: {
+  eyebrowIcon: React.ReactNode;
+  title: string;
+  subtitle: string;
+  rows: Row[];
+  variant: "transport" | "tours";
+}) {
+  return (
+    <div className="rounded-3xl bg-white/97 backdrop-blur-md border border-white/60 shadow-[0_18px_50px_-18px_rgba(12,11,10,0.55)] overflow-hidden">
+      {/* Card header */}
+      <div className="flex items-center gap-3 px-5 sm:px-6 pt-5 pb-4">
+        <div className="flex h-10 w-10 sm:h-11 sm:w-11 items-center justify-center rounded-full bg-ink text-gold shrink-0">
+          {eyebrowIcon}
+        </div>
+        <div className="min-w-0">
+          <h3 className="font-display text-lg sm:text-xl font-semibold text-ink leading-tight tracking-tight">
+            {title}
+          </h3>
+          <p className="font-sans text-xs sm:text-[13px] text-muted leading-snug">{subtitle}</p>
+        </div>
+      </div>
+
+      {/* Rows */}
+      <ul className="divide-y divide-border/70 border-t border-border/70">
+        {rows.map((row) => (
+          <li key={row.title}>
+            <Link
+              href={row.href}
+              className="group flex items-center gap-3 sm:gap-4 px-5 sm:px-6 py-3.5 sm:py-4 transition-colors duration-200 hover:bg-sand/70 focus:outline-none focus-visible:bg-sand/70 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-gold"
+            >
+              {/* Leading icon or thumb */}
+              {row.thumb ? (
+                <div className="relative h-11 w-11 sm:h-12 sm:w-12 shrink-0 overflow-hidden rounded-lg ring-1 ring-border">
+                  <Image
+                    src={row.thumb}
+                    alt=""
+                    fill
+                    sizes="48px"
+                    className="object-cover transition-transform duration-500 group-hover:scale-110"
+                  />
+                </div>
+              ) : (
+                <div className="flex h-11 w-11 sm:h-12 sm:w-12 items-center justify-center shrink-0 rounded-lg bg-ink text-gold">
+                  {row.icon}
+                </div>
+              )}
+
+              {/* Text */}
+              <div className="min-w-0 flex-1">
+                <p className="font-sans text-sm sm:text-[15px] font-semibold text-ink leading-snug">
+                  {row.title}
+                </p>
+                <p className="font-sans text-xs sm:text-[13px] text-muted leading-snug">
+                  {row.subtitle}
+                </p>
+              </div>
+
+              {/* CTA */}
+              <span
+                className={
+                  variant === "transport"
+                    ? "inline-flex shrink-0 items-center gap-1 rounded-full bg-gold px-3.5 sm:px-4 py-2 font-sans text-[11px] sm:text-xs font-bold uppercase tracking-wider text-ink shadow-sm transition-all duration-200 group-hover:bg-gold-dark group-hover:translate-x-0.5"
+                    : "inline-flex shrink-0 items-center gap-1 rounded-full border border-ink/80 bg-white px-3.5 sm:px-4 py-2 font-sans text-[11px] sm:text-xs font-bold uppercase tracking-wider text-ink transition-all duration-200 group-hover:bg-ink group-hover:text-white group-hover:translate-x-0.5"
+                }
+              >
+                {row.cta}
+                <ChevronRight />
+              </span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
 
 export default function Hero() {
   const reducedMotion = useReducedMotion();
@@ -23,7 +181,19 @@ export default function Hero() {
   const dur = reducedMotion ? 0 : 0.75;
   const del = reducedMotion ? 0 : 0.15;
 
-  // Parallax: content rises slightly as you scroll down
+  // Content parallax only applies on lg+, where the brand message and cards
+  // sit side-by-side in one viewport. On narrow widths they stack to ~1500px
+  // and translating that block downward would push the bottom card row out of
+  // the visible section. Default `false` to match SSR.
+  const [isLg, setIsLg] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 1024px)");
+    const update = () => setIsLg(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+
   const { scrollYProgress } = useScroll({
     target: sectionRef,
     offset: ["start start", "end start"],
@@ -35,50 +205,71 @@ export default function Hero() {
     <section
       id="home"
       ref={sectionRef}
-      className="relative min-h-svh flex flex-col items-center justify-center overflow-hidden"
-      aria-label="Hero — TNT Tours Los Angeles"
+      className="relative min-h-svh"
+      aria-label="Hero — TNT Tours Transportation & Tours"
     >
       {/* ─── Background Photo with Ken Burns + Parallax ───────── */}
+      {/* Wrapper owns `overflow-hidden` so the Ken-Burns scale stays inside
+          the section — but the hero content itself is *not* clipped, so
+          stacked cards on narrow viewports never get cut off. */}
       <motion.div
-        className="absolute inset-0"
+        className="absolute inset-0 overflow-hidden"
         style={reducedMotion ? {} : { scale: photoScale }}
       >
-        {/* Slow Ken Burns scale on the photo itself */}
         <motion.div
           className="absolute inset-0"
           animate={reducedMotion ? {} : { scale: [1, 1.07] }}
           transition={{ duration: 10, ease: "easeInOut", repeat: Infinity, repeatType: "mirror" }}
         >
           <Image
-            src={SITE_IMAGES.hero}
-            alt="Downtown Los Angeles skyline at twilight"
+            src={SITE_IMAGES.heroSuvAnaheim}
+            alt="TNT Tours black SUV at the Anaheim Convention Center at golden hour"
             fill
             className="object-cover object-center"
             priority
           />
         </motion.div>
 
-        {/* Warm cinematic overlay */}
+        {/* Cinematic overlay — darker on left for text contrast, fading right so the sunset + SUV + convention center stay visible behind the floating cards */}
         <div
-          className="absolute inset-0"
+          className="absolute inset-0 hidden lg:block"
           style={{
             background:
-              "linear-gradient(160deg, rgba(12,11,10,0.80) 0%, rgba(30,18,6,0.60) 40%, rgba(20,14,5,0.65) 65%, rgba(12,11,10,0.85) 100%)",
+              "linear-gradient(100deg, rgba(8,12,22,0.88) 0%, rgba(10,14,28,0.62) 30%, rgba(12,14,28,0.18) 55%, rgba(12,14,28,0.10) 100%)",
           }}
           aria-hidden="true"
         />
-        {/* Gold warmth from bottom */}
+        {/* Mobile overlay — stronger and uniform, since the text stacks above the cards over the full image */}
+        <div
+          className="absolute inset-0 lg:hidden"
+          style={{
+            background:
+              "linear-gradient(180deg, rgba(8,12,22,0.82) 0%, rgba(10,14,28,0.70) 55%, rgba(8,12,22,0.88) 100%)",
+          }}
+          aria-hidden="true"
+        />
+        {/* Subtle bottom-vignette to anchor the section across all breakpoints */}
+        <div
+          className="absolute inset-x-0 bottom-0 h-40 hidden lg:block"
+          style={{
+            background:
+              "linear-gradient(to top, rgba(8,12,22,0.65) 0%, transparent 100%)",
+          }}
+          aria-hidden="true"
+        />
+        {/* Gold warmth from bottom-left to lift the sunset palette */}
         <div
           className="absolute inset-0"
           style={{
             background:
-              "radial-gradient(ellipse at 50% 110%, rgba(201,169,110,0.22) 0%, transparent 55%)",
+              "radial-gradient(ellipse at 25% 105%, rgba(224,122,74,0.20) 0%, rgba(201,169,110,0.10) 30%, transparent 60%)",
           }}
           aria-hidden="true"
         />
       </motion.div>
 
-      {/* ─── Floating Ambient Orbs (Framer Motion) ────────────── */}
+      {/* ─── Floating Ambient Orbs ────────────────────────────── */}
+      {/* Also self-clipped so the orbs never bleed into adjacent sections. */}
       {!reducedMotion && (
         <div className="absolute inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
           <motion.div
@@ -102,155 +293,180 @@ export default function Hero() {
         </div>
       )}
 
-      {/* ─── Hero Content with Parallax ───────────────────────── */}
+      {/* ─── Hero Content ─────────────────────────────────────── */}
+      {/* `min-h-svh` on the grid so the content stretches to viewport height on
+          desktop but is free to grow on narrow widths where cards stack.
+          Parallax `y` only applies on lg+ — see `isLg` comment above. */}
       <motion.div
-        className="relative z-10 max-w-5xl mx-auto px-5 sm:px-8 text-center pt-20 md:pt-24"
-        style={reducedMotion ? {} : { y: contentY }}
+        className="relative z-10 w-full max-w-7xl mx-auto px-5 sm:px-8 lg:px-12 pt-24 pb-20 sm:pt-28 sm:pb-24 lg:pt-32 lg:pb-28 min-h-svh grid grid-cols-1 lg:grid-cols-[1.05fr_minmax(0,1fr)] gap-10 lg:gap-14 xl:gap-20 lg:items-center"
+        style={reducedMotion || !isLg ? {} : { y: contentY }}
       >
-        {/* Brand mark — `mt-2` keeps a small buffer below the fixed header
-            even on short viewports. */}
-        <motion.div
-          initial={{ opacity: 0, y: reducedMotion ? 0 : 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: dur, ease: "easeOut" }}
-          className="mt-2 mb-6 flex justify-center"
-        >
-          <Logo
-            size="hero"
-            priority
-            className="drop-shadow-[0_6px_40px_rgba(0,0,0,0.55)]"
-          />
-        </motion.div>
-
-        {/* Eyebrow */}
-        <motion.div
-          initial={{ opacity: 0, y: reducedMotion ? 0 : 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: dur, delay: reducedMotion ? 0 : 0.06, ease: "easeOut" }}
-          className="inline-flex items-center gap-2.5 mb-8"
-        >
-          <hr className="gold-rule" aria-hidden="true" />
-          <span className="font-sans text-xs font-semibold tracking-[0.18em] text-gold uppercase">
-            Tours &amp; Transportation · Anaheim · Southern California
-          </span>
-          <hr className="gold-rule" aria-hidden="true" />
-        </motion.div>
-
-        {/* Headline */}
-        <motion.h1
-          initial={{ opacity: 0, y: reducedMotion ? 0 : 32 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: dur, delay: del + 0.06, ease: [0.22, 1, 0.36, 1] }}
-          className="font-display text-4xl sm:text-5xl md:text-6xl lg:text-[4.75rem] font-semibold text-white leading-[1.05] tracking-tight"
-        >
-          Anaheim&rsquo;s Premier
-          <br />
-          <em className="not-italic text-gold">Tours &amp; Transportation</em>
-        </motion.h1>
-
-        {/* Subheadline */}
-        <motion.p
-          initial={{ opacity: 0, y: reducedMotion ? 0 : 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: dur, delay: del + 0.18, ease: "easeOut" }}
-          className="mt-7 font-sans text-lg sm:text-xl text-white/70 max-w-2xl mx-auto leading-relaxed"
-        >
-          Airport transfers, Disneyland transportation, LA tours, private tours,
-          and group transportation across Southern California &mdash; from one
-          trusted local team based in Anaheim.
-        </motion.p>
-
-        {/* CTAs */}
-        <motion.div
-          initial={{ opacity: 0, y: reducedMotion ? 0 : 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: dur, delay: del + 0.28, ease: "easeOut" }}
-          className="mt-10 flex flex-col sm:flex-row gap-4 justify-center"
-        >
-          <motion.div whileHover={reducedMotion ? {} : { scale: 1.04 }} whileTap={{ scale: 0.97 }}>
-            <Link
-              href="/transportation/book"
-              className="inline-flex items-center justify-center gap-2 px-9 py-4 bg-gold text-ink font-sans font-bold text-base rounded-full shadow-lg shadow-gold/30 transition-colors duration-200 hover:bg-gold-dark cursor-pointer focus:outline-none focus:ring-2 focus:ring-gold focus:ring-offset-2 focus:ring-offset-charcoal"
-            >
-              Book Transportation
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5} aria-hidden="true">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M17 8l4 4m0 0l-4 4m4-4H3" />
-              </svg>
-            </Link>
+        {/* ─── LEFT — Brand message + CTAs ─────────────────── */}
+        <div className="text-center lg:text-left">
+          {/* Eyebrow */}
+          <motion.div
+            initial={{ opacity: 0, y: reducedMotion ? 0 : 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: dur, delay: reducedMotion ? 0 : 0.06, ease: "easeOut" }}
+            className="inline-flex items-center gap-2.5 mb-6"
+          >
+            <hr className="gold-rule" aria-hidden="true" />
+            <span className="font-sans text-[11px] sm:text-xs font-semibold tracking-[0.18em] text-gold uppercase">
+              Anaheim · Los Angeles · Orange County
+            </span>
           </motion.div>
-          <motion.div whileHover={reducedMotion ? {} : { scale: 1.03 }} whileTap={{ scale: 0.97 }}>
-            <Link
-              href="#tours"
-              className="inline-flex items-center justify-center gap-2 px-9 py-4 border border-white/40 text-white font-sans font-medium text-base rounded-full backdrop-blur-sm bg-white/5 transition-colors duration-200 hover:border-white/70 hover:bg-white/12 cursor-pointer focus:outline-none focus:ring-2 focus:ring-white/40 focus:ring-offset-2 focus:ring-offset-charcoal"
-            >
-              Explore Tours
-            </Link>
-          </motion.div>
-        </motion.div>
 
-        {/* Trust strip — staggered entrance */}
-        <motion.div
-          initial="hidden"
-          animate="show"
-          variants={{
-            hidden: {},
-            show: { transition: { staggerChildren: 0.1, delayChildren: del + 0.5 } },
-          }}
-          className="mt-12 flex flex-col sm:flex-row items-center justify-center gap-5 sm:gap-8"
-        >
-          {[
-            {
-              icon: <Stars />,
-              label: "5.0 Google Rating",
-            },
-            {
-              icon: (
-                <svg className="w-4 h-4 text-gold" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+          {/* Headline */}
+          <motion.h1
+            initial={{ opacity: 0, y: reducedMotion ? 0 : 32 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: dur, delay: del + 0.06, ease: [0.22, 1, 0.36, 1] }}
+            className="font-display text-[2.5rem] sm:text-5xl lg:text-[3.75rem] xl:text-[4.25rem] font-semibold text-white leading-[1.04] tracking-tight"
+          >
+            Transportation
+            <br />
+            <span className="text-gold">&amp; Tours</span>
+            <span className="block text-white/90 text-3xl sm:text-4xl lg:text-[2.5rem] xl:text-[2.75rem] mt-2 font-normal">
+              from Anaheim
+            </span>
+          </motion.h1>
+
+          {/* Subheadline */}
+          <motion.p
+            initial={{ opacity: 0, y: reducedMotion ? 0 : 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: dur, delay: del + 0.18, ease: "easeOut" }}
+            className="mt-6 font-sans text-base sm:text-lg text-white/75 max-w-xl mx-auto lg:mx-0 leading-relaxed"
+          >
+            Reliable private transportation and unforgettable Southern California
+            tours &mdash; hotel pickup, comfortable vehicles, and friendly local
+            service.
+          </motion.p>
+
+          {/* CTAs */}
+          <motion.div
+            initial={{ opacity: 0, y: reducedMotion ? 0 : 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: dur, delay: del + 0.28, ease: "easeOut" }}
+            className="mt-8 flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center lg:justify-start"
+          >
+            <motion.div whileHover={reducedMotion ? {} : { scale: 1.03 }} whileTap={{ scale: 0.97 }}>
+              <Link
+                href="/transportation/book"
+                className="inline-flex items-center justify-center gap-2 px-7 sm:px-8 py-3.5 sm:py-4 bg-gold text-ink font-sans font-bold text-sm sm:text-base rounded-full shadow-lg shadow-gold/30 transition-colors duration-200 hover:bg-gold-dark cursor-pointer focus:outline-none focus:ring-2 focus:ring-gold focus:ring-offset-2 focus:ring-offset-charcoal"
+              >
+                Book Transportation
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5} aria-hidden="true">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M17 8l4 4m0 0l-4 4m4-4H3" />
                 </svg>
-              ),
-              label: "Hotel Pickup Available",
-            },
-            {
-              icon: (
-                <svg className="w-4 h-4 text-gold" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              ),
-              label: "500+ Happy Guests",
-            },
-            {
-              icon: (
-                <svg className="w-4 h-4 text-gold" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
-              ),
-              label: "Family Friendly",
-            },
-          ].map((item, i) => (
-            <motion.div
-              key={item.label}
-              variants={{
-                hidden: { opacity: 0, y: 10 },
-                show: { opacity: 1, y: 0, transition: { duration: 0.45, ease: "easeOut" } },
-              }}
-              className="flex items-center gap-2"
-            >
-              {i > 0 && <span className="hidden sm:block w-px h-4 bg-white/20 mr-3" aria-hidden="true" />}
-              {item.icon}
-              <span className="font-sans text-sm text-white/65 font-medium">{item.label}</span>
+              </Link>
             </motion.div>
-          ))}
+            <motion.div whileHover={reducedMotion ? {} : { scale: 1.03 }} whileTap={{ scale: 0.97 }}>
+              <Link
+                href="#tours"
+                className="inline-flex items-center justify-center gap-2 px-7 sm:px-8 py-3.5 sm:py-4 border border-white/45 text-white font-sans font-medium text-sm sm:text-base rounded-full backdrop-blur-sm bg-white/5 transition-colors duration-200 hover:border-white/75 hover:bg-white/12 cursor-pointer focus:outline-none focus:ring-2 focus:ring-white/40 focus:ring-offset-2 focus:ring-offset-charcoal"
+              >
+                Explore Tours
+              </Link>
+            </motion.div>
+          </motion.div>
+
+          {/* Trust strip — staggered entrance */}
+          <motion.div
+            initial="hidden"
+            animate="show"
+            variants={{
+              hidden: {},
+              show: { transition: { staggerChildren: 0.09, delayChildren: del + 0.45 } },
+            }}
+            className="mt-9 flex flex-wrap items-center justify-center lg:justify-start gap-x-5 gap-y-3"
+          >
+            {[
+              { icon: <Stars />, label: "5.0 Google Rating" },
+              {
+                icon: (
+                  <svg className="w-4 h-4 text-gold" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                  </svg>
+                ),
+                label: "Hotel Pickup Available",
+              },
+              {
+                icon: (
+                  <svg className="w-4 h-4 text-gold" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 8a3 3 0 11-6 0 3 3 0 016 0zm10 0a3 3 0 11-6 0 3 3 0 016 0zm-5 6a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                ),
+                label: "Family Friendly",
+              },
+              {
+                icon: (
+                  <svg className="w-4 h-4 text-gold" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 5.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-.34-.014-.677-.042-1.012z" />
+                  </svg>
+                ),
+                label: "Professional Drivers",
+              },
+            ].map((item) => (
+              <motion.div
+                key={item.label}
+                variants={{
+                  hidden: { opacity: 0, y: 10 },
+                  show: { opacity: 1, y: 0, transition: { duration: 0.45, ease: "easeOut" } },
+                }}
+                className="flex items-center gap-2"
+              >
+                {item.icon}
+                <span className="font-sans text-[13px] sm:text-sm text-white/75 font-medium whitespace-nowrap">
+                  {item.label}
+                </span>
+              </motion.div>
+            ))}
+          </motion.div>
+        </div>
+
+        {/* ─── RIGHT — Booking cards ───────────────────────── */}
+        <motion.div
+          initial={{ opacity: 0, y: reducedMotion ? 0 : 28 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: dur, delay: del + 0.2, ease: [0.22, 1, 0.36, 1] }}
+          className="flex flex-col gap-4 sm:gap-5 w-full max-w-xl mx-auto lg:max-w-none"
+        >
+          <BookingCard
+            variant="transport"
+            title="Book Transportation"
+            subtitle="Fast, private rides on your schedule."
+            rows={transportationRows}
+            eyebrowIcon={
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8} aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 13l2-7h14l2 7M5 13h14m-14 0v6a1 1 0 001 1h2a1 1 0 001-1v-2h8v2a1 1 0 001 1h2a1 1 0 001-1v-6" />
+                <circle cx="8" cy="16" r="1.4" fill="currentColor" />
+                <circle cx="16" cy="16" r="1.4" fill="currentColor" />
+              </svg>
+            }
+          />
+
+          <BookingCard
+            variant="tours"
+            title="Explore Tours"
+            subtitle="Choose your Southern California experience."
+            rows={tourRows}
+            eyebrowIcon={
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8} aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h1.586a1 1 0 00.707-.293l1.414-1.414A1 1 0 019.414 5h5.172a1 1 0 01.707.293l1.414 1.414A1 1 0 0017.414 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                <circle cx="12" cy="13" r="3.5" />
+              </svg>
+            }
+          />
         </motion.div>
       </motion.div>
 
-      {/* Animated scroll mouse */}
+      {/* Animated scroll mouse — hidden on mobile, where it would crowd the cards */}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ duration: 0.6, delay: 1.6 }}
-        className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2"
+        className="hidden lg:flex absolute bottom-6 left-1/2 -translate-x-1/2 flex-col items-center gap-2 z-10"
         aria-hidden="true"
       >
         <div className="w-6 h-9 rounded-full border border-white/30 flex items-start justify-center pt-1.5">
