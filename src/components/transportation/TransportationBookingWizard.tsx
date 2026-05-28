@@ -11,7 +11,6 @@ import {
   HOURLY_RATES,
   HOURLY_VEHICLE_RATES,
   PASSENGER_GROUPS,
-  POINT_TO_POINT_FIXED_ROUTES,
   SERVICE_LABELS,
   calculateAirportTransferPrice,
   calculateHourlyCharterPrice,
@@ -20,10 +19,11 @@ import {
   shouldShowGroupQuoteMessage,
   type BookableServiceCode,
 } from "@/lib/transportationData";
+import { minHoursFor } from "@/lib/booking/pricing/hourlyCharter";
 import { AIRPORTS } from "@/lib/transportationLocations";
 import { SITE_CONTACT } from "@/lib/siteContact";
 import { FORM_SUBJECT_PREFIX } from "@/lib/siteEnv";
-import { VEHICLES, vehiclesForPassengerCount } from "@/lib/pricing/engine";
+import { SERVICE_RADIUS_MILES, VEHICLES, vehiclesForPassengerCount } from "@/lib/pricing/engine";
 import ChildSeatSelector from "./ChildSeatSelector";
 import GoogleAddressAutocomplete from "./GoogleAddressAutocomplete";
 import VehicleSelector from "./VehicleSelector";
@@ -187,8 +187,15 @@ function isValidEmail(value: string) {
 
 function isValidDateTime(value: string) {
   if (!value || !value.trim()) return false;
+  // Native datetime-local emits "YYYY-MM-DDTHH:MM" when complete; a partially
+  // typed date (just "YYYY-MM-DD") will parse to midnight and slip through a
+  // naive NaN check, so require the full "T HH:MM" portion here.
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(value)) return false;
   const time = new Date(value);
-  return !Number.isNaN(time.getTime());
+  if (Number.isNaN(time.getTime())) return false;
+  // Reject past pickup times (with a small grace so "now" is still acceptable
+  // for last-minute manual entries).
+  return time.getTime() > Date.now() - 60_000;
 }
 
 /** Upper-bound seat count for a PASSENGER_GROUPS value like "1-4" or "11-14". */
@@ -260,6 +267,12 @@ export default function TransportationBookingWizard() {
     service: initialFromUrl.service,
   }));
   const [error, setError] = useState("");
+  /**
+   * Per-field validation errors (keyed by field id used in the form). The
+   * banner error above is the legacy top-of-form summary; we render inline
+   * errors next to each invalid field and scroll to the first one on submit.
+   */
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [submitStatus, setSubmitStatus] = useState<"idle" | "sending" | "success" | "error">("idle");
   const minDateTime = useMemo(() => todayLocal(), []);
   const stepHeaderRef = useRef<HTMLDivElement | null>(null);
@@ -422,7 +435,7 @@ export default function TransportationBookingWizard() {
           gratuity: gratuityAmount,
           total: basePrice + gratuityAmount,
           pending: false,
-          routeLabel: `Starts at ${fromLabel} → ${toLabel}${state.roundTrip ? " (round trip)" : ""}`,
+          routeLabel: `Starts at ${fromLabel} ${state.roundTrip ? "↔" : "→"} ${toLabel}${state.roundTrip ? " (round trip)" : ""}`,
           priceLabel: "Total",
         };
       }
@@ -555,11 +568,35 @@ export default function TransportationBookingWizard() {
     };
   }, [state, quote]);
 
+  /** Map from `WizardState` keys to the `fieldErrors` keys we render under each field. */
+  const STATE_TO_ERROR_KEY: Partial<Record<keyof WizardState, string[]>> = {
+    airport: ["airport"],
+    otherAddress: ["airport-other-address"],
+    otherAddressPlaceId: ["airport-other-address"],
+    flightTime: ["flight-time"],
+    returnFlightTime: ["return-flight-time"],
+    pickupAddress: ["pickup-address-p2p", "pickup-address-charter"],
+    dropoffAddress: ["dropoff-address-p2p"],
+    pickupPlaceId: ["pickup-address-p2p", "pickup-address-charter"],
+    dropoffPlaceId: ["dropoff-address-p2p"],
+    pickupDateTime: ["pickup-time-p2p", "pickup-time-charter"],
+    hours: ["hours"],
+    vehicleId: ["vehicle"],
+    passengerGroup: ["passengerGroup"],
+    firstName: ["firstName"],
+    lastName: ["lastName"],
+    email: ["email"],
+    phone: ["phone"],
+  };
+
   const handleField = <K extends keyof WizardState>(field: K, value: WizardState[K]) => {
     const nextValue = field === "phone" && typeof value === "string"
       ? (formatPhoneInput(value) as WizardState[K])
       : value;
     setState((current) => ({ ...current, [field]: nextValue }));
+    // Clear inline errors tied to this field on edit.
+    const keys = STATE_TO_ERROR_KEY[field];
+    if (keys) keys.forEach(clearFieldError);
   };
 
   const goToStep = (target: number) => {
@@ -570,78 +607,88 @@ export default function TransportationBookingWizard() {
     setHighestStep((current) => Math.max(current, target));
   };
 
-  function formatMissingFields(items: string[]) {
-    if (items.length === 1) return items[0];
-    if (items.length === 2) return `${items[0]} and ${items[1]}`;
-    const last = items[items.length - 1];
-    return `${items.slice(0, -1).join(", ")}, and ${last}`;
-  }
+  /**
+   * Validate every required field on `currentStep` at once and return both a
+   * per-field map (rendered inline) and an optional top-of-form summary.
+   * Empty `fieldErrors` ⇒ step is valid.
+   */
+  function validateStep(currentStep: number): { fieldErrors: Record<string, string>; summary: string | null } {
+    const errs: Record<string, string> = {};
 
-  function validateStep(currentStep: number): string | null {
     if (currentStep === 1) {
-      if (!state.service) return "Please choose a transportation service to continue.";
+      if (!state.service) errs.service = "Please choose a transportation service to continue.";
     }
+
     if (currentStep === 2) {
       if (state.service === "airport-transfer") {
-        const missing: string[] = [];
-        if (!state.airport) missing.push("an airport");
-        if (!state.otherAddress) missing.push("the hotel/address");
-        if (!isValidDateTime(state.flightTime)) {
-          const flightLabel = state.roundTrip || state.airportDirection === "from-airport"
-            ? "arrival flight time"
-            : "departure flight time";
-          missing.push(`your ${flightLabel}`);
+        if (!state.airport) errs.airport = "Pick an airport.";
+        if (!state.otherAddress || !state.otherAddressPlaceId) {
+          errs["airport-other-address"] = "Pick your hotel or address from the suggestions.";
         }
-        if (missing.length > 0) {
-          return `Please enter ${formatMissingFields(missing)}.`;
+        if (!isValidDateTime(state.flightTime)) {
+          errs["flight-time"] =
+            state.roundTrip || state.airportDirection === "from-airport"
+              ? "Enter a valid future arrival date and time."
+              : "Enter a valid future departure date and time.";
         }
         if (state.roundTrip && !isValidDateTime(state.returnFlightTime)) {
-          return "For a round trip, please add the return departure time.";
+          errs["return-flight-time"] = "Enter a valid future return-flight date and time.";
         }
       }
       if (state.service === "point-to-point") {
-        if (!state.pickupPlaceId || !state.dropoffPlaceId) {
-          return "Please pick both a pickup and drop-off address from the suggestions.";
+        if (!state.pickupPlaceId) {
+          errs["pickup-address-p2p"] = "Pick a pickup address from the suggestions.";
         }
-        if (!state.pickupDateTime) {
-          return "Please add a pickup date and time.";
+        if (!state.dropoffPlaceId) {
+          errs["dropoff-address-p2p"] = "Pick a drop-off address from the suggestions.";
         }
-        if (!state.vehicleId) {
-          return "Please pick a vehicle.";
+        if (!state.pickupDateTime || !isValidDateTime(state.pickupDateTime)) {
+          errs["pickup-time-p2p"] = "Enter a valid pickup date and time.";
         }
+        if (!state.vehicleId) errs.vehicle = "Pick a vehicle.";
         if (quote.kind === "error") {
-          return quote.message;
-        }
-        if (quote.kind === "loading") {
-          return "Hang on — we're calculating your fare.";
+          errs.quote = quote.message;
+        } else if (quote.kind === "loading") {
+          errs.quote = "Hang on — we're calculating your fare.";
         }
       }
       if (state.service === "hourly-charter") {
-        if (!state.pickupAddress || !state.pickupDateTime) {
-          return "Please add a pickup address and date/time.";
+        if (!state.pickupAddress || !state.pickupPlaceId) {
+          errs["pickup-address-charter"] = "Pick a pickup address from the suggestions.";
         }
-        if (state.hours < 4) return "Hourly charter has a 4-hour minimum.";
+        if (!state.pickupDateTime || !isValidDateTime(state.pickupDateTime)) {
+          errs["pickup-time-charter"] = "Enter a valid pickup date and time.";
+        }
+        const minH = minHoursFor(state.vehicleId || state.passengerGroup);
+        if (state.hours < minH) {
+          errs.hours = `${minH}-hour minimum for this vehicle.`;
+        }
       }
     }
+
     if (currentStep === 3) {
-      if (!state.passengerGroup) return "Please choose a passenger group.";
+      if (!state.passengerGroup) errs.passengerGroup = "Choose a passenger group.";
       const passengerCount = passengersFromGroup(state.passengerGroup);
       const eligibleVehicles = vehiclesForPassengerCount(passengerCount);
       if (eligibleVehicles.length > 0 && !eligibleVehicles.some((v) => v.id === state.vehicleId)) {
-        return "Please choose a vehicle.";
+        errs.vehicle = "Pick a vehicle.";
       }
-      if (state.luggageCount < 0) return "Luggage count can’t be negative.";
+      if (state.luggageCount < 0) errs.luggage = "Luggage count can't be negative.";
     }
+
     if (currentStep === 4) {
-      const missing: string[] = [];
-      if (!state.firstName.trim() || !state.lastName.trim()) missing.push("your first and last name");
-      if (!isValidEmail(state.email)) missing.push("a valid email address");
-      if (!isValidPhone(state.phone)) missing.push("a valid phone number");
-      if (missing.length > 0) {
-        return `Please enter ${formatMissingFields(missing)}.`;
-      }
+      if (!state.firstName.trim()) errs.firstName = "Enter your first name.";
+      if (!state.lastName.trim()) errs.lastName = "Enter your last name.";
+      if (!isValidEmail(state.email)) errs.email = "Enter a valid email address.";
+      if (!isValidPhone(state.phone)) errs.phone = "Enter a valid phone number.";
     }
-    return null;
+
+    const summary = Object.keys(errs).length === 0
+      ? null
+      : Object.keys(errs).length === 1
+        ? Object.values(errs)[0]
+        : "Please fix the highlighted fields below.";
+    return { fieldErrors: errs, summary };
   }
 
   const scrollToTop = () => {
@@ -650,20 +697,52 @@ export default function TransportationBookingWizard() {
     }
   };
 
-  const handleNext = () => {
-    const err = validateStep(step);
-    if (err) {
-      setError(err);
+  /**
+   * Smooth-scroll to the first invalid field on the current step. We tag
+   * every wrapper with `data-error="true"` when its key appears in
+   * `fieldErrors`, so a single querySelector finds the topmost one.
+   */
+  const scrollToFirstError = () => {
+    if (typeof document === "undefined") return;
+    const first = document.querySelector<HTMLElement>("[data-error='true']");
+    if (first) {
+      first.scrollIntoView({ behavior: "smooth", block: "center" });
+      // Best-effort focus on the inner control to help screen readers.
+      const focusable = first.querySelector<HTMLElement>("input, select, textarea, button");
+      focusable?.focus({ preventScroll: true });
+    } else {
       scrollToTop();
+    }
+  };
+
+  const handleNext = () => {
+    const result = validateStep(step);
+    if (result.summary) {
+      setFieldErrors(result.fieldErrors);
+      setError(result.summary);
+      // Wait one frame so the inline-error attributes paint before we scan.
+      window.requestAnimationFrame(() => scrollToFirstError());
       return;
     }
+    setFieldErrors({});
     setError("");
     goToStep(step + 1);
   };
 
   const handleBack = () => {
     setError("");
+    setFieldErrors({});
     if (step > 1) goToStep(step - 1);
+  };
+
+  /** Clear a single field's error as soon as the user edits it. */
+  const clearFieldError = (key: string) => {
+    setFieldErrors((current) => {
+      if (!current[key]) return current;
+      const { [key]: _removed, ...rest } = current;
+      void _removed;
+      return rest;
+    });
   };
 
   function buildSubmissionPayload() {
@@ -919,19 +998,7 @@ export default function TransportationBookingWizard() {
         {state.service ? SERVICE_LABELS[state.service] : "Choose a service to begin"}
       </h3>
       {priceSummary.routeLabel && (
-        <>
-          <p className="mt-1 text-sm text-muted">{priceSummary.routeLabel}</p>
-          {(state.service === "point-to-point" || state.service === "hourly-charter") && state.pickupAddress && state.dropoffAddress && (
-            <p className="mt-2 text-sm text-muted">
-              {state.pickupAddress} → {state.dropoffAddress}
-            </p>
-          )}
-          {state.service === "airport-transfer" && state.airport && state.otherAddress && (
-            <p className="mt-2 text-sm text-muted">
-              {airportDisplayName(state.airport)} ↔ {state.otherAddress}
-            </p>
-          )}
-        </>
+        <p className="mt-1 text-sm text-muted">{priceSummary.routeLabel}</p>
       )}
 
       <dl className="mt-5 space-y-2.5 text-sm text-ink">
@@ -963,18 +1030,9 @@ export default function TransportationBookingWizard() {
 
       <div className="mt-5 border-t border-border pt-4 flex items-center justify-between">
         <span className="font-display text-lg font-semibold text-ink">{priceSummary.priceLabel}</span>
-        <AnimatePresence mode="wait" initial={false}>
-          <motion.span
-            key={priceSummary.total ?? "pending"}
-            initial={reducedMotion ? { opacity: 1 } : { opacity: 0, y: -4, scale: 0.96 }}
-            animate={reducedMotion ? { opacity: 1 } : { opacity: 1, y: 0, scale: 1 }}
-            exit={reducedMotion ? { opacity: 0 } : { opacity: 0, y: 4, scale: 0.96 }}
-            transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
-            className="font-display text-2xl font-semibold text-ink tabular-nums"
-          >
-            {priceSummary.total !== null ? formatCurrency(priceSummary.total) : "—"}
-          </motion.span>
-        </AnimatePresence>
+        <span className="font-display text-2xl font-semibold text-ink tabular-nums">
+          {priceSummary.total !== null ? formatCurrency(priceSummary.total) : "—"}
+        </span>
       </div>
 
       {/* Only show the "custom quote" message when the booking actually
@@ -1218,38 +1276,46 @@ export default function TransportationBookingWizard() {
             </div>
 
             {/* 2. Airport */}
-            <div>
+            <div data-error={fieldErrors.airport ? "true" : undefined}>
               <label htmlFor="airport" className={labelClass}>Airport <RequiredMark /></label>
               <select
                 id="airport"
                 value={state.airport}
                 onChange={(e) => handleField("airport", e.target.value)}
-                className={inputBase}
+                aria-invalid={fieldErrors.airport ? "true" : undefined}
+                className={`${inputBase} ${fieldErrors.airport ? "border-red-500 ring-2 ring-red-200" : ""}`}
               >
                 {AIRPORT_OPTIONS.map((code) => (
                   <option key={code} value={code}>{airportDisplayName(code)}</option>
                 ))}
               </select>
+              {fieldErrors.airport && <p className="mt-1.5 text-xs text-red-600" role="alert">{fieldErrors.airport}</p>}
             </div>
 
             {/* 3. Hotel / non-airport address — Google Places autocomplete
                 so customers pick a real, validated address. Place ID is
                 captured for future driver-routing use. */}
-            <GoogleAddressAutocomplete
-              id="airport-other-address"
-              label={addressLabel}
-              value={state.otherAddress}
-              placeId={state.otherAddressPlaceId}
-              placeholder={addressPlaceholder}
-              required
-              onChange={(picked) => {
-                setState((s) => ({
-                  ...s,
-                  otherAddress: picked.formattedAddress || picked.name || "",
-                  otherAddressPlaceId: picked.placeId,
-                }));
-              }}
-            />
+            <div data-error={fieldErrors["airport-other-address"] ? "true" : undefined}>
+              <GoogleAddressAutocomplete
+                id="airport-other-address"
+                label={addressLabel}
+                value={state.otherAddress}
+                placeId={state.otherAddressPlaceId}
+                placeholder={addressPlaceholder}
+                required
+                onChange={(picked) => {
+                  setState((s) => ({
+                    ...s,
+                    otherAddress: picked.formattedAddress || picked.name || "",
+                    otherAddressPlaceId: picked.placeId,
+                  }));
+                  clearFieldError("airport-other-address");
+                }}
+              />
+              {fieldErrors["airport-other-address"] && (
+                <p className="mt-1.5 text-xs text-red-600" role="alert">{fieldErrors["airport-other-address"]}</p>
+              )}
+            </div>
 
             {/* 4. Flight info — airline + flight number (optional helpful info) */}
             <div className={fieldGroup}>
@@ -1281,7 +1347,7 @@ export default function TransportationBookingWizard() {
             </div>
 
             {/* 5. Primary flight time */}
-            <div>
+            <div data-error={fieldErrors["flight-time"] ? "true" : undefined}>
               <label htmlFor="flight-time" className={labelClass}>
                 {flightTimeLabel} <RequiredMark />
               </label>
@@ -1291,14 +1357,19 @@ export default function TransportationBookingWizard() {
                 min={minDateTime}
                 value={state.flightTime}
                 onChange={(e) => handleField("flightTime", e.target.value)}
-                className={inputBase}
+                aria-invalid={fieldErrors["flight-time"] ? "true" : undefined}
+                className={`${inputBase} ${fieldErrors["flight-time"] ? "border-red-500 ring-2 ring-red-200" : ""}`}
               />
-              <p className="mt-2 text-xs text-muted">{flightTimeHint}</p>
+              {fieldErrors["flight-time"] ? (
+                <p className="mt-1.5 text-xs text-red-600" role="alert">{fieldErrors["flight-time"]}</p>
+              ) : (
+                <p className="mt-2 text-xs text-muted">{flightTimeHint}</p>
+              )}
             </div>
 
             {/* 6. Return flight time — round trip only */}
             {tripType === "round-trip" && (
-              <div>
+              <div data-error={fieldErrors["return-flight-time"] ? "true" : undefined}>
                 <label htmlFor="return-flight-time" className={labelClass}>
                   Return departure time <RequiredMark />
                 </label>
@@ -1308,12 +1379,17 @@ export default function TransportationBookingWizard() {
                   min={state.flightTime || minDateTime}
                   value={state.returnFlightTime}
                   onChange={(e) => handleField("returnFlightTime", e.target.value)}
-                  className={inputBase}
+                  aria-invalid={fieldErrors["return-flight-time"] ? "true" : undefined}
+                  className={`${inputBase} ${fieldErrors["return-flight-time"] ? "border-red-500 ring-2 ring-red-200" : ""}`}
                 />
-                <p className="mt-2 text-xs text-muted">
-                  When you fly home — we&apos;ll pick you up and take you back to the airport.
-                  Add your return flight number in the notes step if you&apos;d like.
-                </p>
+                {fieldErrors["return-flight-time"] ? (
+                  <p className="mt-1.5 text-xs text-red-600" role="alert">{fieldErrors["return-flight-time"]}</p>
+                ) : (
+                  <p className="mt-2 text-xs text-muted">
+                    When you fly home — we&apos;ll pick you up and take you back to the airport.
+                    Add your return flight number in the notes step if you&apos;d like.
+                  </p>
+                )}
               </div>
             )}
 
@@ -1380,14 +1456,14 @@ export default function TransportationBookingWizard() {
 
 
             <div className="grid gap-4">
-              <div>
+              <div data-error={fieldErrors["pickup-address-p2p"] ? "true" : undefined}>
                 <GoogleAddressAutocomplete
                   id="pickup-address-p2p"
                   label="Pickup address"
                   value={state.pickupAddress}
                   placeId={state.pickupPlaceId}
                   required
-                  placeholder="Start typing — we'll only show locations within 20 miles of our home base."
+                  placeholder={`Start typing — we'll only show locations within ${SERVICE_RADIUS_MILES} miles of our home base.`}
                   inputRef={(el) => { firstFieldRef.current = el; }}
                   onChange={(picked) => {
                     setState((s) => ({
@@ -1395,30 +1471,38 @@ export default function TransportationBookingWizard() {
                       pickupAddress: picked.formattedAddress || picked.name || "",
                       pickupPlaceId: picked.placeId,
                     }));
+                    clearFieldError("pickup-address-p2p");
                   }}
                 />
+                {fieldErrors["pickup-address-p2p"] && (
+                  <p className="mt-1.5 text-xs text-red-600" role="alert">{fieldErrors["pickup-address-p2p"]}</p>
+                )}
                 {quote.kind === "error" && (quote.offending === "pickup" || quote.offending === "both") && (
-                  <p className="mt-2 text-xs text-red-700" role="alert">{quote.message}</p>
+                  <p className="mt-2 text-xs text-red-600" role="alert">{quote.message}</p>
                 )}
               </div>
-              <div>
+              <div data-error={fieldErrors["dropoff-address-p2p"] ? "true" : undefined}>
                 <GoogleAddressAutocomplete
                   id="dropoff-address-p2p"
                   label="Drop-off address"
                   value={state.dropoffAddress}
                   placeId={state.dropoffPlaceId}
                   required
-                  placeholder="Destination — must also be within 20 miles of our home base."
+                  placeholder={`Destination — must also be within ${SERVICE_RADIUS_MILES} miles of our home base.`}
                   onChange={(picked) => {
                     setState((s) => ({
                       ...s,
                       dropoffAddress: picked.formattedAddress || picked.name || "",
                       dropoffPlaceId: picked.placeId,
                     }));
+                    clearFieldError("dropoff-address-p2p");
                   }}
                 />
+                {fieldErrors["dropoff-address-p2p"] && (
+                  <p className="mt-1.5 text-xs text-red-600" role="alert">{fieldErrors["dropoff-address-p2p"]}</p>
+                )}
                 {quote.kind === "error" && (quote.offending === "dropoff" || quote.offending === "both") && (
-                  <p className="mt-2 text-xs text-red-700" role="alert">{quote.message}</p>
+                  <p className="mt-2 text-xs text-red-600" role="alert">{quote.message}</p>
                 )}
               </div>
             </div>
@@ -1444,7 +1528,7 @@ export default function TransportationBookingWizard() {
             />
 
             <div className={fieldGroup}>
-              <div>
+              <div data-error={fieldErrors["pickup-time-p2p"] ? "true" : undefined}>
                 <label htmlFor="pickup-time-p2p" className={labelClass}>Pickup date and time <RequiredMark /></label>
                 <input
                   id="pickup-time-p2p"
@@ -1452,8 +1536,12 @@ export default function TransportationBookingWizard() {
                   min={minDateTime}
                   value={state.pickupDateTime}
                   onChange={(e) => handleField("pickupDateTime", e.target.value)}
-                  className={inputBase}
+                  aria-invalid={fieldErrors["pickup-time-p2p"] ? "true" : undefined}
+                  className={`${inputBase} ${fieldErrors["pickup-time-p2p"] ? "border-red-500 ring-2 ring-red-200" : ""}`}
                 />
+                {fieldErrors["pickup-time-p2p"] && (
+                  <p className="mt-1.5 text-xs text-red-600" role="alert">{fieldErrors["pickup-time-p2p"]}</p>
+                )}
               </div>
               <ToggleRow
                 id="extra-stop"
@@ -1484,25 +1572,31 @@ export default function TransportationBookingWizard() {
       {state.service === "hourly-charter" && (
         <div className="space-y-6">
           <div className={fieldGroup}>
-            {/* Pickup address — Google Places autocomplete so customers
-                pick a real venue/hotel. Place ID is captured for driver routing. */}
-            <GoogleAddressAutocomplete
-              id="pickup-address-charter"
-              label="Pickup address"
-              value={state.pickupAddress}
-              placeId={state.pickupPlaceId}
-              placeholder="Hotel, event venue, or address"
-              required
-              inputRef={(el) => { firstFieldRef.current = el; }}
-              onChange={(picked) => {
-                setState((s) => ({
-                  ...s,
-                  pickupAddress: picked.formattedAddress || picked.name || "",
-                  pickupPlaceId: picked.placeId,
-                }));
-              }}
-            />
-            <div>
+            {/* Pickup address — same Google Places autocomplete wrapper as P2P
+                so the styling stays consistent (white background, dark text). */}
+            <div data-error={fieldErrors["pickup-address-charter"] ? "true" : undefined}>
+              <GoogleAddressAutocomplete
+                id="pickup-address-charter"
+                label="Pickup address"
+                value={state.pickupAddress}
+                placeId={state.pickupPlaceId}
+                placeholder="Hotel, event venue, or address"
+                required
+                inputRef={(el) => { firstFieldRef.current = el; }}
+                onChange={(picked) => {
+                  setState((s) => ({
+                    ...s,
+                    pickupAddress: picked.formattedAddress || picked.name || "",
+                    pickupPlaceId: picked.placeId,
+                  }));
+                  clearFieldError("pickup-address-charter");
+                }}
+              />
+              {fieldErrors["pickup-address-charter"] && (
+                <p className="mt-1.5 text-xs text-red-600" role="alert">{fieldErrors["pickup-address-charter"]}</p>
+              )}
+            </div>
+            <div data-error={fieldErrors["pickup-time-charter"] ? "true" : undefined}>
               <label htmlFor="pickup-time-charter" className={labelClass}>Pickup date and time <RequiredMark /></label>
               <input
                 id="pickup-time-charter"
@@ -1510,33 +1604,43 @@ export default function TransportationBookingWizard() {
                 min={minDateTime}
                 value={state.pickupDateTime}
                 onChange={(e) => handleField("pickupDateTime", e.target.value)}
-                className={inputBase}
+                aria-invalid={fieldErrors["pickup-time-charter"] ? "true" : undefined}
+                className={`${inputBase} ${fieldErrors["pickup-time-charter"] ? "border-red-500 ring-2 ring-red-200" : ""}`}
               />
+              {fieldErrors["pickup-time-charter"] && (
+                <p className="mt-1.5 text-xs text-red-600" role="alert">{fieldErrors["pickup-time-charter"]}</p>
+              )}
             </div>
           </div>
 
           <div className={fieldGroup}>
             <div>
               <span className={labelClass}>Hours <RequiredMark /></span>
-              <NumberStepper
-                value={state.hours}
-                min={4}
-                max={12}
-                ariaLabel="Number of hours"
-                onChange={(v) => handleField("hours", v)}
-              />
-              <p className="mt-2 text-xs text-muted">4-hour minimum. Longer days fine — we’ll plan stops with you.</p>
-              <p className="mt-2 text-xs text-muted">
-                {(() => {
-                  const hourlyRate =
-                    HOURLY_VEHICLE_RATES[state.vehicleId as keyof typeof HOURLY_VEHICLE_RATES] ??
-                    HOURLY_RATES[state.passengerGroup as keyof typeof HOURLY_RATES] ??
-                    0;
-                  return `$${hourlyRate}/hr × ${state.hours} hours = ${formatCurrency(
-                    hourlyRate * state.hours
-                  )}`;
-                })()}
-              </p>
+              {(() => {
+                const tierMin = minHoursFor(state.vehicleId || state.passengerGroup);
+                const billed = Math.max(tierMin, state.hours);
+                const hourlyRate =
+                  HOURLY_VEHICLE_RATES[state.vehicleId as keyof typeof HOURLY_VEHICLE_RATES] ??
+                  HOURLY_RATES[state.passengerGroup as keyof typeof HOURLY_RATES] ??
+                  0;
+                return (
+                  <>
+                    <NumberStepper
+                      value={Math.max(tierMin, state.hours)}
+                      min={tierMin}
+                      max={12}
+                      ariaLabel="Number of hours"
+                      onChange={(v) => handleField("hours", v)}
+                    />
+                    <p className="mt-2 text-xs text-muted">
+                      {tierMin}-hour minimum. Longer days fine — we’ll plan stops with you. Unlimited miles within Greater LA &amp; Orange County.
+                    </p>
+                    <p className="mt-2 text-xs text-muted">
+                      ${hourlyRate}/hr × {billed} hours = {formatCurrency(hourlyRate * billed)}
+                    </p>
+                  </>
+                );
+              })()}
             </div>
             <div>
               <label htmlFor="planned-stops" className={labelClass}>Planned stops or notes</label>
@@ -1555,7 +1659,7 @@ export default function TransportationBookingWizard() {
             <ul className="mt-3 grid gap-1.5 text-sm text-ink sm:grid-cols-2">
               {Object.entries(HOURLY_RATES).map(([group, rate]) => (
                 <li key={group} className="flex justify-between gap-3">
-                  <span>{group} passengers</span>
+                  <span>{group} passengers <span className="text-muted text-xs">({minHoursFor(group)}-hr min)</span></span>
                   <span className="font-medium tabular-nums">{formatCurrency(rate)}/hr</span>
                 </li>
               ))}
@@ -1660,31 +1764,35 @@ export default function TransportationBookingWizard() {
       />
 
       <div className={fieldGroup}>
-        <div>
+        <div data-error={fieldErrors.firstName ? "true" : undefined}>
           <label htmlFor="firstName" className={labelClass}>First name <RequiredMark /></label>
           <input
             id="firstName"
             value={state.firstName}
             onChange={(e) => handleField("firstName", e.target.value)}
             autoComplete="given-name"
-            className={inputBase}
+            aria-invalid={fieldErrors.firstName ? "true" : undefined}
+            className={`${inputBase} ${fieldErrors.firstName ? "border-red-500 ring-2 ring-red-200" : ""}`}
             ref={(el) => { firstFieldRef.current = el; }}
           />
+          {fieldErrors.firstName && <p className="mt-1.5 text-xs text-red-600" role="alert">{fieldErrors.firstName}</p>}
         </div>
-        <div>
+        <div data-error={fieldErrors.lastName ? "true" : undefined}>
           <label htmlFor="lastName" className={labelClass}>Last name <RequiredMark /></label>
           <input
             id="lastName"
             value={state.lastName}
             onChange={(e) => handleField("lastName", e.target.value)}
             autoComplete="family-name"
-            className={inputBase}
+            aria-invalid={fieldErrors.lastName ? "true" : undefined}
+            className={`${inputBase} ${fieldErrors.lastName ? "border-red-500 ring-2 ring-red-200" : ""}`}
           />
+          {fieldErrors.lastName && <p className="mt-1.5 text-xs text-red-600" role="alert">{fieldErrors.lastName}</p>}
         </div>
       </div>
 
       <div className={fieldGroup}>
-        <div>
+        <div data-error={fieldErrors.email ? "true" : undefined}>
           <label htmlFor="email" className={labelClass}>Email <RequiredMark /></label>
           <input
             id="email"
@@ -1693,10 +1801,12 @@ export default function TransportationBookingWizard() {
             onChange={(e) => handleField("email", e.target.value)}
             autoComplete="email"
             inputMode="email"
-            className={inputBase}
+            aria-invalid={fieldErrors.email ? "true" : undefined}
+            className={`${inputBase} ${fieldErrors.email ? "border-red-500 ring-2 ring-red-200" : ""}`}
           />
+          {fieldErrors.email && <p className="mt-1.5 text-xs text-red-600" role="alert">{fieldErrors.email}</p>}
         </div>
-        <div>
+        <div data-error={fieldErrors.phone ? "true" : undefined}>
           <label htmlFor="phone" className={labelClass}>Phone <RequiredMark /></label>
           <input
             id="phone"
@@ -1706,8 +1816,10 @@ export default function TransportationBookingWizard() {
             autoComplete="tel"
             inputMode="tel"
             placeholder="+1 (714) 555-0100"
-            className={inputBase}
+            aria-invalid={fieldErrors.phone ? "true" : undefined}
+            className={`${inputBase} ${fieldErrors.phone ? "border-red-500 ring-2 ring-red-200" : ""}`}
           />
+          {fieldErrors.phone && <p className="mt-1.5 text-xs text-red-600" role="alert">{fieldErrors.phone}</p>}
         </div>
       </div>
 
@@ -1918,18 +2030,9 @@ export default function TransportationBookingWizard() {
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted">
                 {priceSummary.total !== null ? "Total" : "Estimated total"}
               </p>
-              <AnimatePresence mode="wait" initial={false}>
-                <motion.p
-                  key={priceSummary.total ?? "pending-step6"}
-                  initial={reducedMotion ? { opacity: 1 } : { opacity: 0, y: -4 }}
-                  animate={reducedMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
-                  exit={reducedMotion ? { opacity: 0 } : { opacity: 0, y: 4 }}
-                  transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
-                  className="mt-1 font-display text-2xl font-semibold text-ink tabular-nums"
-                >
-                  {priceSummary.total !== null ? formatCurrency(priceSummary.total) : "Quote pending"}
-                </motion.p>
-              </AnimatePresence>
+              <p className="mt-1 font-display text-2xl font-semibold text-ink tabular-nums">
+                {priceSummary.total !== null ? formatCurrency(priceSummary.total) : "Quote pending"}
+              </p>
             </div>
           </div>
 
@@ -2137,9 +2240,9 @@ export default function TransportationBookingWizard() {
                 }
                 exit={{ opacity: 0, y: -4 }}
                 transition={{ duration: 0.45, ease: "easeOut" }}
-                className="mb-5 flex items-start gap-3 rounded-xl border border-sunset/30 bg-sunset/10 p-4 text-sm text-ink"
+                className="mb-5 flex items-start gap-3 rounded-xl border-2 border-red-500 bg-red-50 p-4 text-sm font-medium text-red-700"
               >
-                <svg className="w-5 h-5 shrink-0 text-sunset mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} aria-hidden="true">
+                <svg className="w-5 h-5 shrink-0 text-red-600 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} aria-hidden="true">
                   <circle cx="12" cy="12" r="10" />
                   <path d="M12 8v4M12 16h.01" strokeLinecap="round" />
                 </svg>
@@ -2232,18 +2335,9 @@ export default function TransportationBookingWizard() {
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">Estimated total</p>
-              <AnimatePresence mode="wait" initial={false}>
-                <motion.p
-                  key={priceSummary.total ?? "pending-mobile"}
-                  initial={reducedMotion ? { opacity: 1 } : { opacity: 0, y: -3 }}
-                  animate={reducedMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
-                  exit={reducedMotion ? { opacity: 0 } : { opacity: 0, y: 3 }}
-                  transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
-                  className="font-display text-lg font-semibold text-ink tabular-nums truncate"
-                >
-                  {priceSummary.total !== null ? formatCurrency(priceSummary.total) : "—"}
-                </motion.p>
-              </AnimatePresence>
+              <p className="font-display text-lg font-semibold text-ink tabular-nums truncate">
+                {priceSummary.total !== null ? formatCurrency(priceSummary.total) : "—"}
+              </p>
             </div>
             <div className="flex gap-2 shrink-0">
               {step > 1 && (

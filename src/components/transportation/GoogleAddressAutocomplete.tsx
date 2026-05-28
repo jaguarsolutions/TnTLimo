@@ -10,8 +10,8 @@ import { milesToMeters } from "@/lib/geo/service-area";
  *
  * Uses the newer `PlaceAutocompleteElement` web component (replaces the
  * legacy Autocomplete class which Google has stopped enhancing). The
- * `locationRestriction` is bound to our 20-mile home base service area so
- * out-of-area suggestions never appear.
+ * `locationRestriction` is bound to our home base service area (see
+ * config/point-to-point-service-area.json) so out-of-area suggestions never appear.
  *
  * The browser API key (`NEXT_PUBLIC_GOOGLE_MAPS_BROWSER_KEY`) must be
  * configured with HTTP referrer restrictions and limited to Maps JS API +
@@ -313,15 +313,35 @@ export default function GoogleAddressAutocomplete({
 /**
  * Apply our form-input styling to the embedded input inside the
  * PlaceAutocompleteElement web component. The element renders its own input
- * (no slots in this version), so we reach in once at mount time.
+ * (no slots in this version), so we reach in once at mount time AND inject a
+ * scoped stylesheet inside the shadow DOM — the component otherwise honors
+ * `prefers-color-scheme: dark` and renders a black background, which breaks
+ * with the rest of the form on every mount of this component.
  */
 function applyInputStyling(element: HTMLElement): void {
-  // The web component exposes its input via a part — apply via a stylesheet
-  // adoption. Simplest cross-browser approach: query shadow DOM if available,
-  // otherwise wait one frame and pierce light DOM.
   requestAnimationFrame(() => {
+    // Force light mode on the web component element itself — Google's CSS
+    // toggles on `:host([color-scheme="dark"])`.
+    element.setAttribute("color-scheme", "light");
+    element.style.colorScheme = "light";
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const shadow = (element as any).shadowRoot as ShadowRoot | null;
+
+    // Inject a small stylesheet inside the shadow root so the dropdown panel
+    // (also rendered inside the shadow tree) inherits light colors.
+    if (shadow && !shadow.querySelector("style[data-tnt-light]")) {
+      const style = document.createElement("style");
+      style.setAttribute("data-tnt-light", "");
+      style.textContent = `
+        :host, :host(*), .widget-container { color-scheme: light !important; }
+        input, .widget-container { background-color: #ffffff !important; color: #111827 !important; }
+        .widget-prediction, .widget-prediction *, [role="option"] { background-color: #ffffff !important; color: #111827 !important; }
+        [role="option"]:hover, [role="option"][aria-selected="true"] { background-color: #f5f5f4 !important; }
+      `;
+      shadow.appendChild(style);
+    }
+
     const targets: HTMLElement[] = [];
     if (shadow) {
       shadow.querySelectorAll("input").forEach((el) => targets.push(el as HTMLElement));
@@ -344,6 +364,7 @@ function applyInputStyling(element: HTMLElement): void {
       input.style.color = "#111827";
       input.style.caretColor = "#111827";
       input.style.outline = "none";
+      input.style.colorScheme = "light";
     }
   });
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import type { Vehicle } from "@/lib/pricing/engine";
+import { INCLUDED_MILES, type Vehicle } from "@/lib/pricing/engine";
 import { SITE_IMAGES } from "@/lib/siteImages";
 import {
   calculateAirportTransferPrice,
@@ -69,15 +69,16 @@ export default function VehicleSelector({
 
     // Point-to-point pricing
     if (distanceMiles !== undefined && distanceMiles >= 0) {
-      const baseFare = vehicle.baseFare;
-      const mileageFare = vehicle.perMile * distanceMiles;
-      const rawFare = baseFare + mileageFare;
-      const fare = Math.max(vehicle.minimumFare, rawFare);
+      const extraMiles = Math.max(0, distanceMiles - INCLUDED_MILES);
+      const fare = vehicle.baseFare + vehicle.perMile * extraMiles;
+      if (extraMiles === 0) {
+        return `${formatCurrency(fare)} base · includes ${INCLUDED_MILES} mi`;
+      }
       return `${formatCurrency(fare)} for ${distanceMiles.toFixed(1)} mi`;
     }
 
-    // Fallback: show base structure
-    return `${formatCurrency(vehicle.baseFare)} base · ${formatCurrency(vehicle.minimumFare)} min`;
+    // Fallback: show base only — base IS the floor under the new formula
+    return `${formatCurrency(vehicle.baseFare)} base · includes ${INCLUDED_MILES} mi`;
   }
   return (
     <div>
