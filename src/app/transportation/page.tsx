@@ -183,7 +183,7 @@ export default function TransportationPage() {
                 </div>
                 <div className="p-6">
                   <h3 className="font-display text-xl font-semibold text-ink">Sedan</h3>
-                  <p className="mt-2 text-sm text-muted">1-4 passengers · $5/mile · $95 minimum</p>
+                  <p className="mt-2 text-sm text-muted">1-4 passengers · From $85 · First 14 mi included</p>
                   <p className="mt-4 text-sm text-ink">Smooth, private rides for couples, small families, and airport transfers.</p>
                 </div>
               </article>
@@ -199,7 +199,7 @@ export default function TransportationPage() {
                 </div>
                 <div className="p-6">
                   <h3 className="font-display text-xl font-semibold text-ink">SUV</h3>
-                  <p className="mt-2 text-sm text-muted">5-6 passengers · $6/mile · $95 minimum</p>
+                  <p className="mt-2 text-sm text-muted">5-6 passengers · From $95 · First 14 mi included</p>
                   <p className="mt-4 text-sm text-ink">Premium family and group rides with extra room for luggage and comfort.</p>
                 </div>
               </article>
@@ -215,7 +215,7 @@ export default function TransportationPage() {
                 </div>
                 <div className="p-6">
                   <h3 className="font-display text-xl font-semibold text-ink">Van</h3>
-                  <p className="mt-2 text-sm text-muted">7-10 passengers · $8/mile · $95 minimum</p>
+                  <p className="mt-2 text-sm text-muted">7-10 passengers · From $120 · First 14 mi included</p>
                   <p className="mt-4 text-sm text-ink">Spacious private transporting for larger families, groups, and event teams.</p>
                 </div>
               </article>
@@ -231,7 +231,7 @@ export default function TransportationPage() {
                 </div>
                 <div className="p-6">
                   <h3 className="font-display text-xl font-semibold text-ink">Sprinter</h3>
-                  <p className="mt-2 text-sm text-muted">11-14 passengers · $10/mile · $95 minimum</p>
+                  <p className="mt-2 text-sm text-muted">11-14 passengers · From $185 · First 14 mi included</p>
                   <p className="mt-4 text-sm text-ink">Executive group transportation with plenty of space and a private driver.</p>
                 </div>
               </article>

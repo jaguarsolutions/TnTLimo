@@ -71,7 +71,7 @@ export interface Quote {
 /* ── Constants ─────────────────────────────────────────────────────────── */
 
 /** Miles included in the vehicle's base fare — extra miles bill at `perMile`. */
-export const INCLUDED_MILES = 25;
+export const INCLUDED_MILES = 14;
 /** Outer service radius (miles from home base). Used for quote eligibility. */
 export const SERVICE_RADIUS_MILES = 150;
 /** Flat per-leg fee added to every airport transfer leg. */

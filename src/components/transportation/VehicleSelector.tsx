@@ -4,7 +4,6 @@ import Image from "next/image";
 import { INCLUDED_MILES, type Vehicle } from "@/lib/pricing/engine";
 import { SITE_IMAGES } from "@/lib/siteImages";
 import {
-  calculateAirportTransferPrice,
   calculateHourlyCharterPrice,
   formatCurrency,
 } from "@/lib/transportationData";
@@ -15,8 +14,6 @@ interface VehicleSelectorProps {
   vehicles: Vehicle[];
   selectedId: string;
   onSelect: (vehicleId: string) => void;
-  /** For airport transfers: the airport code */
-  airport?: string;
   /** For hourly charters: the number of hours */
   hours?: number;
   /** For point-to-point: the distance in miles for pricing */
@@ -46,20 +43,11 @@ export default function VehicleSelector({
   vehicles,
   selectedId,
   onSelect,
-  airport,
   hours,
   distanceMiles,
 }: VehicleSelectorProps) {
   function getPriceLabel(vehicle: Vehicle): string {
-    // Airport transfer pricing
-    if (airport) {
-      const quote = calculateAirportTransferPrice(airport, vehicle.id, false, false);
-      if (quote) {
-        return `${formatCurrency(quote.base)} base`;
-      }
-    }
-
-    // Hourly charter pricing
+    // Hourly charter — show the per-hour rate (not a base figure).
     if (hours !== undefined) {
       const quote = calculateHourlyCharterPrice(vehicle.id, hours);
       if (quote) {
@@ -67,18 +55,21 @@ export default function VehicleSelector({
       }
     }
 
-    // Point-to-point pricing
+    // Point-to-point — only show a dollar amount once a real distance is
+    // known and the trip exceeds the included miles (i.e. a real total, not
+    // a "$X base" figure that's easily mistaken for the final price).
     if (distanceMiles !== undefined && distanceMiles >= 0) {
       const extraMiles = Math.max(0, distanceMiles - INCLUDED_MILES);
-      const fare = vehicle.baseFare + vehicle.perMile * extraMiles;
-      if (extraMiles === 0) {
-        return `${formatCurrency(fare)} base · includes ${INCLUDED_MILES} mi`;
+      if (extraMiles > 0) {
+        const fare = vehicle.baseFare + vehicle.perMile * extraMiles;
+        return `${formatCurrency(fare)} for ${distanceMiles.toFixed(1)} mi`;
       }
-      return `${formatCurrency(fare)} for ${distanceMiles.toFixed(1)} mi`;
+      return `Includes ${INCLUDED_MILES} mi`;
     }
 
-    // Fallback: show base only — base IS the floor under the new formula
-    return `${formatCurrency(vehicle.baseFare)} base · includes ${INCLUDED_MILES} mi`;
+    // Airport-transfer and other fallbacks — don't surface a "base" price on
+    // the card. The real, all-in quote is shown in the booking summary.
+    return "";
   }
   return (
     <div>
@@ -116,7 +107,12 @@ export default function VehicleSelector({
                   <div className="min-w-0">
                     <span className="block text-sm font-semibold text-ink">{vehicle.name}</span>
                     <span className="block text-xs text-muted mt-1">Up to {vehicle.maxPassengers} passengers · {vehicle.maxLuggage} bags</span>
-                    <p className="mt-2 text-sm text-muted">{getPriceLabel(vehicle)}</p>
+                    {(() => {
+                      const priceLabel = getPriceLabel(vehicle);
+                      return priceLabel ? (
+                        <p className="mt-2 text-sm text-muted">{priceLabel}</p>
+                      ) : null;
+                    })()}
                     {vehicle.description ? (
                       <span className="block text-xs text-muted/85 mt-1 leading-snug">{vehicle.description}</span>
                     ) : null}

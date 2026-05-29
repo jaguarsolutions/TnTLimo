@@ -1704,7 +1704,6 @@ export default function TransportationBookingWizard() {
           vehicles={vehiclesForPassengerCount(passengersFromGroup(state.passengerGroup))}
           selectedId={state.vehicleId}
           onSelect={(vehicleId) => handleField("vehicleId", vehicleId)}
-          airport={state.service === "airport-transfer" ? state.airport : undefined}
           hours={state.service === "hourly-charter" ? state.hours : undefined}
         />
       )}

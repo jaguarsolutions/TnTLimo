@@ -107,41 +107,46 @@ function BookingCard({
   variant: "transport" | "tours";
 }) {
   return (
-    <div className="rounded-3xl bg-white/97 backdrop-blur-md border border-white/60 shadow-[0_18px_50px_-18px_rgba(12,11,10,0.55)] overflow-hidden">
-      {/* Card header */}
-      <div className="flex items-center gap-3 px-5 sm:px-6 pt-5 pb-4">
-        <div className="flex h-10 w-10 sm:h-11 sm:w-11 items-center justify-center rounded-full bg-ink text-gold shrink-0">
-          {eyebrowIcon}
+    <div className="rounded-[22px] bg-white/90 backdrop-blur-xl border border-white/55 shadow-[0_24px_60px_-22px_rgba(12,11,10,0.38)] overflow-hidden">
+      {/* Card header — same gold-rule accent on both cards balances the
+          Transportation card (which leads with gold CTA buttons) against the
+          Tours card so neither feels like the secondary option. */}
+      <div className="px-5 sm:px-6 pt-4 pb-3.5">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 sm:h-11 sm:w-11 items-center justify-center rounded-full bg-ink text-gold shrink-0">
+            {eyebrowIcon}
+          </div>
+          <div className="min-w-0">
+            <h3 className="font-display text-xl sm:text-[1.4rem] font-semibold text-ink leading-tight tracking-tight">
+              {title}
+            </h3>
+            <p className="font-sans text-xs sm:text-[13px] text-muted leading-snug">{subtitle}</p>
+          </div>
         </div>
-        <div className="min-w-0">
-          <h3 className="font-display text-lg sm:text-xl font-semibold text-ink leading-tight tracking-tight">
-            {title}
-          </h3>
-          <p className="font-sans text-xs sm:text-[13px] text-muted leading-snug">{subtitle}</p>
-        </div>
+        <hr className="gold-rule mt-3" aria-hidden="true" />
       </div>
 
       {/* Rows */}
-      <ul className="divide-y divide-border/70 border-t border-border/70">
+      <ul className="divide-y divide-border/70">
         {rows.map((row) => (
           <li key={row.title}>
             <Link
               href={row.href}
-              className="group flex items-center gap-3 sm:gap-4 px-5 sm:px-6 py-3.5 sm:py-4 transition-colors duration-200 hover:bg-sand/70 focus:outline-none focus-visible:bg-sand/70 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-gold"
+              className="group flex items-center gap-3 sm:gap-4 px-5 sm:px-6 py-3 sm:py-3.5 transition-colors duration-200 hover:bg-sand/70 focus:outline-none focus-visible:bg-sand/70 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-gold"
             >
               {/* Leading icon or thumb */}
               {row.thumb ? (
-                <div className="relative h-11 w-11 sm:h-12 sm:w-12 shrink-0 overflow-hidden rounded-lg ring-1 ring-border">
+                <div className="relative h-10 w-10 sm:h-11 sm:w-11 shrink-0 overflow-hidden rounded-lg ring-1 ring-border">
                   <Image
                     src={row.thumb}
                     alt=""
                     fill
-                    sizes="48px"
+                    sizes="44px"
                     className="object-cover transition-transform duration-500 group-hover:scale-110"
                   />
                 </div>
               ) : (
-                <div className="flex h-11 w-11 sm:h-12 sm:w-12 items-center justify-center shrink-0 rounded-lg bg-ink text-gold">
+                <div className="flex h-10 w-10 sm:h-11 sm:w-11 items-center justify-center shrink-0 rounded-lg bg-ink text-gold">
                   {row.icon}
                 </div>
               )}
@@ -312,7 +317,7 @@ export default function Hero() {
           >
             <hr className="gold-rule" aria-hidden="true" />
             <span className="font-sans text-[11px] sm:text-xs font-semibold tracking-[0.18em] text-gold uppercase">
-              Anaheim · Los Angeles · Orange County
+              Anaheim · Los Angeles
             </span>
           </motion.div>
 
@@ -321,13 +326,11 @@ export default function Hero() {
             initial={{ opacity: 0, y: reducedMotion ? 0 : 32 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: dur, delay: del + 0.06, ease: [0.22, 1, 0.36, 1] }}
-            className="font-display text-[2.5rem] sm:text-5xl lg:text-[3.75rem] xl:text-[4.25rem] font-semibold text-white leading-[1.04] tracking-tight"
+            className="font-display text-[2.25rem] sm:text-[2.75rem] lg:text-[3.5rem] xl:text-[4rem] font-semibold text-white leading-[1.06] tracking-tight"
           >
-            Transportation
-            <br />
-            <span className="text-gold">&amp; Tours</span>
-            <span className="block text-white/90 text-3xl sm:text-4xl lg:text-[2.5rem] xl:text-[2.75rem] mt-2 font-normal">
-              from Anaheim
+            Private Transportation
+            <span className="block mt-1.5">
+              &amp; <span className="text-gold">Southern California Tours</span>
             </span>
           </motion.h1>
 
@@ -338,17 +341,47 @@ export default function Hero() {
             transition={{ duration: dur, delay: del + 0.18, ease: "easeOut" }}
             className="mt-6 font-sans text-base sm:text-lg text-white/75 max-w-xl mx-auto lg:mx-0 leading-relaxed"
           >
-            Reliable private transportation and unforgettable Southern California
-            tours &mdash; hotel pickup, comfortable vehicles, and friendly local
-            service.
+            Airport transfers, hourly charters, point-to-point transportation, and
+            unforgettable Los Angeles experiences &mdash; all with friendly local
+            service and hotel pickup available.
           </motion.p>
+
+          {/* Trust statement — small, brighter than body, elegant italic line.
+              Sits between the subheadline and the booking actions to reassure
+              before the CTA. */}
+          <motion.p
+            initial={{ opacity: 0, y: reducedMotion ? 0 : 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: dur, delay: del + 0.24, ease: "easeOut" }}
+            className="mt-5 font-display italic text-[15px] sm:text-base text-white/90 max-w-xl mx-auto lg:mx-0 leading-relaxed"
+          >
+            Trusted by thousands of Southern California visitors for airport
+            transfers, private transportation, and guided tours.
+          </motion.p>
+
+          {/* Google review badge — stars + 5.0 rating + happy-guests count,
+              placed directly above the CTAs as the final piece of social proof
+              before the user commits. */}
+          <motion.div
+            initial={{ opacity: 0, y: reducedMotion ? 0 : 14 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: dur, delay: del + 0.30, ease: "easeOut" }}
+            className="mt-5 inline-flex flex-wrap items-center justify-center lg:justify-start gap-x-3 gap-y-2 rounded-full border border-white/15 bg-white/8 backdrop-blur-sm px-4 py-2"
+          >
+            <span className="flex items-center gap-1.5">
+              <Stars />
+              <span className="font-sans text-sm font-semibold text-white">5.0 Google Rating</span>
+            </span>
+            <span className="h-3.5 w-px bg-white/25" aria-hidden="true" />
+            <span className="font-sans text-sm text-white/80">500+ Happy Guests</span>
+          </motion.div>
 
           {/* CTAs */}
           <motion.div
             initial={{ opacity: 0, y: reducedMotion ? 0 : 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: dur, delay: del + 0.28, ease: "easeOut" }}
-            className="mt-8 flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center lg:justify-start"
+            transition={{ duration: dur, delay: del + 0.36, ease: "easeOut" }}
+            className="mt-7 flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center lg:justify-start"
           >
             <motion.div whileHover={reducedMotion ? {} : { scale: 1.03 }} whileTap={{ scale: 0.97 }}>
               <Link
@@ -371,58 +404,6 @@ export default function Hero() {
             </motion.div>
           </motion.div>
 
-          {/* Trust strip — staggered entrance */}
-          <motion.div
-            initial="hidden"
-            animate="show"
-            variants={{
-              hidden: {},
-              show: { transition: { staggerChildren: 0.09, delayChildren: del + 0.45 } },
-            }}
-            className="mt-9 flex flex-wrap items-center justify-center lg:justify-start gap-x-5 gap-y-3"
-          >
-            {[
-              { icon: <Stars />, label: "5.0 Google Rating" },
-              {
-                icon: (
-                  <svg className="w-4 h-4 text-gold" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-                  </svg>
-                ),
-                label: "Hotel Pickup Available",
-              },
-              {
-                icon: (
-                  <svg className="w-4 h-4 text-gold" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 8a3 3 0 11-6 0 3 3 0 016 0zm10 0a3 3 0 11-6 0 3 3 0 016 0zm-5 6a3 3 0 11-6 0 3 3 0 016 0z" />
-                  </svg>
-                ),
-                label: "Family Friendly",
-              },
-              {
-                icon: (
-                  <svg className="w-4 h-4 text-gold" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 5.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-.34-.014-.677-.042-1.012z" />
-                  </svg>
-                ),
-                label: "Professional Drivers",
-              },
-            ].map((item) => (
-              <motion.div
-                key={item.label}
-                variants={{
-                  hidden: { opacity: 0, y: 10 },
-                  show: { opacity: 1, y: 0, transition: { duration: 0.45, ease: "easeOut" } },
-                }}
-                className="flex items-center gap-2"
-              >
-                {item.icon}
-                <span className="font-sans text-[13px] sm:text-sm text-white/75 font-medium whitespace-nowrap">
-                  {item.label}
-                </span>
-              </motion.div>
-            ))}
-          </motion.div>
         </div>
 
         {/* ─── RIGHT — Booking cards ───────────────────────── */}

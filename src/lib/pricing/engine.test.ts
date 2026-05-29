@@ -78,37 +78,45 @@ describe("vehiclesForPassengerCount", () => {
 });
 
 describe("computeQuote — P2P short trips return base only", () => {
-  it("Sedan 7 mi → $95 base (no mileage)", () => {
+  it("Sedan 7 mi → $85 base (no mileage)", () => {
     const q = computeQuote({ vehicle: sedan(), distanceMiles: 7, tripType: "oneway" });
-    expect(q.base).toBe(95);
+    expect(q.base).toBe(85);
   });
-  it("Sedan 25 mi (boundary) → $95 base", () => {
-    const q = computeQuote({ vehicle: sedan(), distanceMiles: 25, tripType: "oneway" });
-    expect(q.base).toBe(95);
+  it("Sedan 14 mi (boundary) → $85 base", () => {
+    const q = computeQuote({ vehicle: sedan(), distanceMiles: 14, tripType: "oneway" });
+    expect(q.base).toBe(85);
   });
-  it("Sprinter 14 mi → $185 base", () => {
+  it("Sprinter 14 mi (boundary) → $185 base", () => {
     const q = computeQuote({ vehicle: sprinter(), distanceMiles: 14, tripType: "oneway" });
     expect(q.base).toBe(185);
   });
   it("breakdown for short trip shows base line only (no mileage)", () => {
     const q = computeQuote({ vehicle: sedan(), distanceMiles: 7, tripType: "oneway" });
     expect(q.breakdown).toHaveLength(1);
-    expect(q.breakdown[0].amount).toBe(95);
+    expect(q.breakdown[0].amount).toBe(85);
   });
 });
 
 describe("computeQuote — long-haul matches the published target prices", () => {
-  it("Sedan 120 mi → $333", () => {
-    expect(computeQuote({ vehicle: sedan(), distanceMiles: 120, tripType: "oneway" }).base).toBe(333);
+  it("Sedan 120 mi → $403", () => {
+    // 85 + (120-14)*3.0 = 85 + 318 = 403
+    expect(computeQuote({ vehicle: sedan(), distanceMiles: 120, tripType: "oneway" }).base).toBe(403);
   });
-  it("SUV 120 mi → $395", () => {
-    expect(computeQuote({ vehicle: suv(), distanceMiles: 120, tripType: "oneway" }).base).toBe(395);
+  it("SUV 120 mi → $466", () => {
+    // 95 + (120-14)*3.5 = 95 + 371 = 466
+    expect(computeQuote({ vehicle: suv(), distanceMiles: 120, tripType: "oneway" }).base).toBe(466);
   });
-  it("Van 120 mi → $525", () => {
-    expect(computeQuote({ vehicle: van(), distanceMiles: 120, tripType: "oneway" }).base).toBe(525);
+  it("Van 120 mi → $544", () => {
+    // 120 + (120-14)*4.0 = 120 + 424 = 544
+    expect(computeQuote({ vehicle: van(), distanceMiles: 120, tripType: "oneway" }).base).toBe(544);
   });
-  it("Sprinter 120 mi → $660", () => {
-    expect(computeQuote({ vehicle: sprinter(), distanceMiles: 120, tripType: "oneway" }).base).toBe(660);
+  it("Sprinter 120 mi → $715", () => {
+    // 185 + (120-14)*5.0 = 185 + 530 = 715
+    expect(computeQuote({ vehicle: sprinter(), distanceMiles: 120, tripType: "oneway" }).base).toBe(715);
+  });
+  it("Sedan 35 mi → $148", () => {
+    // 85 + (35-14)*3.0 = 85 + 63 = 148  (LAX-equivalent P2P without airport fee)
+    expect(computeQuote({ vehicle: sedan(), distanceMiles: 35, tripType: "oneway" }).base).toBe(148);
   });
   it("breakdown shows Base + Mileage when extra miles apply", () => {
     const q = computeQuote({ vehicle: sedan(), distanceMiles: 120, tripType: "oneway" });
@@ -120,14 +128,15 @@ describe("computeQuote — long-haul matches the published target prices", () =>
 describe("computeQuote — round trip multiplier", () => {
   it("Sedan 26 mi round-trip = one-way × 1.9", () => {
     const q = computeQuote({ vehicle: sedan(), distanceMiles: 26, tripType: "roundtrip" });
-    // one-way exact: 95 + (26-25)*2.5 = 97.5; round = 97.5 * 1.9 = 185.25 → $185
-    expect(q.oneWayFareExact).toBeCloseTo(97.5, 2);
-    expect(q.base).toBe(185);
+    // one-way exact: 85 + (26-14)*3.0 = 121; round = 121 * 1.9 = 229.9 → $230
+    expect(q.oneWayFareExact).toBeCloseTo(121, 2);
+    expect(q.base).toBe(230);
     expect(ROUND_TRIP_MULTIPLIER).toBe(1.9);
   });
 });
 
 describe("computeQuote — extra-stop adds $20 before gratuity", () => {
+  // 26 mi sedan one-way = 85 + (26-14)*3 = $121; with stop = $141.
   const without = computeQuote({ vehicle: sedan(), distanceMiles: 26, tripType: "oneway", extraStop: false });
   const withStop = computeQuote({ vehicle: sedan(), distanceMiles: 26, tripType: "oneway", extraStop: true });
 
@@ -197,27 +206,27 @@ describe("computeFixedRouteQuote", () => {
 });
 
 describe("computeAirportQuote", () => {
-  it("adds $10 per leg to the base distance fare", () => {
-    // Sedan 14 mi → $95 base + $10 fee = $105
+  it("adds $10 per leg to the base distance fare (SNA-equivalent, 14 mi)", () => {
+    // Sedan 14 mi → $85 base + $10 fee = $95 (boundary trip, no extra mileage)
     const q = computeAirportQuote({ vehicle: sedan(), miles: 14, tripType: "oneway" });
-    expect(q.base).toBe(105);
+    expect(q.base).toBe(95);
   });
 
-  it("LAX → Anaheim Sedan ~35 mi → $130", () => {
-    // 95 + (35-25)*2.5 = 120; +$10 = $130
+  it("LAX → Anaheim Sedan ~35 mi → $158", () => {
+    // 85 + (35-14)*3 = 148; +$10 = $158
     const q = computeAirportQuote({ vehicle: sedan(), miles: 35, tripType: "oneway" });
-    expect(q.base).toBe(130);
+    expect(q.base).toBe(158);
   });
 
   it("round-trip multiplies the per-leg total (engine + fee)", () => {
-    // one-way leg: 130; rt = 130 * 1.9 = $247
+    // one-way leg: 158; rt = 158 * 1.9 = 300.2 → $300
     const q = computeAirportQuote({ vehicle: sedan(), miles: 35, tripType: "roundtrip" });
-    expect(q.base).toBe(247);
+    expect(q.base).toBe(300);
   });
 
   it("meet & greet adds $30 once, regardless of trip type", () => {
     const q = computeAirportQuote({ vehicle: sedan(), miles: 35, tripType: "oneway", meetGreet: true });
-    expect(q.base).toBe(160);
+    expect(q.base).toBe(188);
     expect(MEET_GREET_FEE).toBe(30);
   });
 
@@ -226,8 +235,15 @@ describe("computeAirportQuote", () => {
   });
 
   it("can skip the airport fee for back-compat callers", () => {
+    // 85 + (35-14)*3 = 148  (no airport fee)
     const q = computeAirportQuote({ vehicle: sedan(), miles: 35, tripType: "oneway", includeAirportFee: false });
-    expect(q.base).toBe(120);
+    expect(q.base).toBe(148);
+  });
+
+  it("SAN → Anaheim Sprinter ~95 mi → $600", () => {
+    // 185 + (95-14)*5 = 590; +$10 = $600
+    const q = computeAirportQuote({ vehicle: sprinter(), miles: 95, tripType: "oneway" });
+    expect(q.base).toBe(600);
   });
 });
 
@@ -270,7 +286,7 @@ describe("isWithinServiceRadius", () => {
 });
 
 describe("INCLUDED_MILES constant", () => {
-  it("is 25", () => {
-    expect(INCLUDED_MILES).toBe(25);
+  it("is 14", () => {
+    expect(INCLUDED_MILES).toBe(14);
   });
 });
