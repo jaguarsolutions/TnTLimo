@@ -65,8 +65,17 @@ const buttonSecondary =
 
 type ServiceCode = BookableServiceCode;
 
-/** Per-line item in the Booking Summary breakdown (Base / Mileage / etc.). */
-type BreakdownLine = { label: string; amount: number };
+/**
+ * One row in the Booking Summary breakdown. Either:
+ *  - A section header (no `amount`) — used to label round-trip legs.
+ *  - A regular item (has `amount`) — optionally `indent: true` to nest under
+ *    the section header above it.
+ */
+type BreakdownLine = {
+  label: string;
+  amount?: number;
+  indent?: boolean;
+};
 
 /**
  * Compute the pre-gratuity breakdown for an airport leg given the vehicle and
@@ -91,31 +100,38 @@ function buildAirportBreakdown(
   const extraMiles = Math.max(0, distanceMiles - INCLUDED_MILES);
   const baseFare = vehicle.airportBaseFare;
   const mileageFare = vehicle.airportPerMile * extraMiles;
-  const oneWayLegExact = baseFare + mileageFare + AIRPORT_SERVICE_FEE;
+
+  // Per-leg component lines (Base, optional Mileage, Airport fee). Reused
+  // for both legs of a round-trip and for the single one-way breakdown.
+  const legLines = (indent: boolean): BreakdownLine[] => {
+    const lines: BreakdownLine[] = [
+      {
+        label: `Base (${vehicle.name}, includes ${INCLUDED_MILES} mi)`,
+        amount: baseFare,
+        indent,
+      },
+    ];
+    if (extraMiles > 0) {
+      lines.push({
+        label: `Mileage (${extraMiles.toFixed(1)} mi × $${vehicle.airportPerMile.toFixed(2)})`,
+        amount: Math.round(mileageFare),
+        indent,
+      });
+    }
+    lines.push({ label: "Airport service fee", amount: AIRPORT_SERVICE_FEE, indent });
+    return lines;
+  };
 
   if (roundTrip) {
     return [
-      {
-        label: `Round-trip fare (${vehicle.name}, ${distanceMiles.toFixed(1)} mi)`,
-        amount: Math.round(oneWayLegExact * ROUND_TRIP_MULTIPLIER),
-      },
+      { label: "Leg 1 · Arrival" },
+      ...legLines(true),
+      { label: "Leg 2 · Return" },
+      ...legLines(true),
     ];
   }
 
-  const lines: BreakdownLine[] = [
-    {
-      label: `Base (${vehicle.name}, includes ${INCLUDED_MILES} mi)`,
-      amount: baseFare,
-    },
-  ];
-  if (extraMiles > 0) {
-    lines.push({
-      label: `Mileage (${extraMiles.toFixed(1)} mi × $${vehicle.airportPerMile.toFixed(2)})`,
-      amount: Math.round(mileageFare),
-    });
-  }
-  lines.push({ label: "Airport service fee", amount: AIRPORT_SERVICE_FEE });
-  return lines;
+  return legLines(false);
 }
 
 /**
@@ -134,30 +150,35 @@ function buildPointToPointBreakdown(
   const extraMiles = Math.max(0, distanceMiles - INCLUDED_MILES);
   const baseFare = vehicle.baseFare;
   const mileageFare = vehicle.perMile * extraMiles;
-  const oneWayExact = baseFare + mileageFare;
+
+  const legLines = (indent: boolean): BreakdownLine[] => {
+    const lines: BreakdownLine[] = [
+      {
+        label: `Base (${vehicle.name}, includes ${INCLUDED_MILES} mi)`,
+        amount: baseFare,
+        indent,
+      },
+    ];
+    if (extraMiles > 0) {
+      lines.push({
+        label: `Mileage (${extraMiles.toFixed(1)} mi × $${vehicle.perMile.toFixed(2)})`,
+        amount: Math.round(mileageFare),
+        indent,
+      });
+    }
+    return lines;
+  };
 
   if (roundTrip) {
     return [
-      {
-        label: `Round-trip fare (${vehicle.name}, ${distanceMiles.toFixed(1)} mi)`,
-        amount: Math.round(oneWayExact * ROUND_TRIP_MULTIPLIER),
-      },
+      { label: "Leg 1 · Outbound" },
+      ...legLines(true),
+      { label: "Leg 2 · Return" },
+      ...legLines(true),
     ];
   }
 
-  const lines: BreakdownLine[] = [
-    {
-      label: `Base (${vehicle.name}, includes ${INCLUDED_MILES} mi)`,
-      amount: baseFare,
-    },
-  ];
-  if (extraMiles > 0) {
-    lines.push({
-      label: `Mileage (${extraMiles.toFixed(1)} mi × $${vehicle.perMile.toFixed(2)})`,
-      amount: Math.round(mileageFare),
-    });
-  }
-  return lines;
+  return legLines(false);
 }
 
 /** Which side of the airport trip the airport sits on. */
@@ -1289,12 +1310,28 @@ export default function TransportationBookingWizard() {
           </dd>
         </div>
         {priceSummary.breakdown && priceSummary.breakdown.length > 0 ? (
-          priceSummary.breakdown.map((line) => (
-            <div key={line.label} className="flex justify-between gap-3">
-              <dt className="text-muted">{line.label}</dt>
-              <dd className="font-medium tabular-nums">{formatCurrency(line.amount)}</dd>
-            </div>
-          ))
+          priceSummary.breakdown.map((line, idx) => {
+            // Section header — no amount, used to introduce a round-trip leg.
+            if (line.amount === undefined) {
+              return (
+                <div
+                  key={`${idx}-${line.label}`}
+                  className="pt-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-ink/80"
+                >
+                  {line.label}
+                </div>
+              );
+            }
+            return (
+              <div
+                key={`${idx}-${line.label}`}
+                className={`flex justify-between gap-3${line.indent ? " pl-3" : ""}`}
+              >
+                <dt className="text-muted">{line.label}</dt>
+                <dd className="font-medium tabular-nums">{formatCurrency(line.amount)}</dd>
+              </div>
+            );
+          })
         ) : (
           <div className="flex justify-between gap-3">
             <dt className="text-muted">Base</dt>

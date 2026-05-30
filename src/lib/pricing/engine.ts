@@ -86,8 +86,10 @@ export const AIRPORT_SERVICE_FEE = 10;
 export const MEET_GREET_FEE = 30;
 export const EXTRA_STOP_FEE = 20;
 export const GRATUITY_RATE = 0.2;
-/** 5% round-trip discount: round_trip_fare = one_way * 1.9 (instead of 2.0) */
-export const ROUND_TRIP_MULTIPLIER = 1.9;
+/** Round-trip fare = one_way × 2 (each component literally doubled — no
+ *  implicit discount, so the breakdown can show "Base × 2 / Mileage × 2 /
+ *  Airport fee × 2" and have the numbers add up). */
+export const ROUND_TRIP_MULTIPLIER = 2.0;
 
 /* ── Core math ─────────────────────────────────────────────────────────── */
 

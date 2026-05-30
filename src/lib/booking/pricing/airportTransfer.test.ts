@@ -21,10 +21,10 @@ describe("calculateAirportTransferPrice — distance-based + $10 service fee", (
     expect(quote?.base).toBe(159);
   });
 
-  it("LAX round trip applies the 1.9 multiplier to the one-way leg", () => {
-    // one-way (rounded) 159 → rt = 159 * 1.9 = 302.1 → $302
+  it("LAX round trip is exactly 2 × the one-way leg", () => {
+    // one-way (rounded) 159 → rt = 159 * 2 = $318
     const quote = calculateAirportTransferPrice("LAX", "sedan", false, true, 35);
-    expect(quote?.total).toBe(302);
+    expect(quote?.total).toBe(318);
   });
 
   it("LAX Sedan + meet & greet adds $30 to addOns", () => {

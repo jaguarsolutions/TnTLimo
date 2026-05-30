@@ -126,12 +126,12 @@ describe("computeQuote — long-haul matches the published target prices", () =>
 });
 
 describe("computeQuote — round trip multiplier", () => {
-  it("Sedan 26 mi round-trip = one-way × 1.9", () => {
+  it("Sedan 26 mi round-trip = one-way × 2", () => {
     const q = computeQuote({ vehicle: sedan(), distanceMiles: 26, tripType: "roundtrip" });
-    // one-way exact: 85 + (26-14)*3.0 = 121; round = 121 * 1.9 = 229.9 → $230
+    // one-way exact: 85 + (26-14)*3.0 = 121; round-trip = 121 * 2 = $242
     expect(q.oneWayFareExact).toBeCloseTo(121, 2);
-    expect(q.base).toBe(230);
-    expect(ROUND_TRIP_MULTIPLIER).toBe(1.9);
+    expect(q.base).toBe(242);
+    expect(ROUND_TRIP_MULTIPLIER).toBe(2.0);
   });
 });
 
@@ -183,14 +183,14 @@ describe("computeFixedRouteQuote", () => {
     expect(q.base).toBe(95);
   });
 
-  it("round-trip applies 1.9× to the fixed price", () => {
+  it("round-trip doubles the fixed price", () => {
     const q = computeFixedRouteQuote({
       vehicle: sedan(),
       fixedRoutePrice: 100,
       routeLabel: "Test",
       tripType: "roundtrip",
     });
-    expect(q.base).toBe(190);
+    expect(q.base).toBe(200);
   });
 
   it("extra stop adds $20", () => {
@@ -218,10 +218,10 @@ describe("computeAirportQuote", () => {
     expect(q.base).toBe(159);
   });
 
-  it("round-trip multiplies the per-leg total (engine + fee)", () => {
-    // one-way exact leg: 158.50; rt = 158.50 * 1.9 = 301.15 → $301
+  it("round-trip doubles the per-leg total (engine + fee)", () => {
+    // one-way exact leg: 158.50; rt = 158.50 * 2 = $317
     const q = computeAirportQuote({ vehicle: sedan(), miles: 35, tripType: "roundtrip" });
-    expect(q.base).toBe(301);
+    expect(q.base).toBe(317);
   });
 
   it("meet & greet adds $30 once, regardless of trip type", () => {
