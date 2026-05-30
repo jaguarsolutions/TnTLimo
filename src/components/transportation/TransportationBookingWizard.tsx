@@ -23,7 +23,16 @@ import { minHoursFor } from "@/lib/booking/pricing/hourlyCharter";
 import { AIRPORTS } from "@/lib/transportationLocations";
 import { SITE_CONTACT } from "@/lib/siteContact";
 import { FORM_SUBJECT_PREFIX } from "@/lib/siteEnv";
-import { SERVICE_RADIUS_MILES, VEHICLES, vehiclesForPassengerCount } from "@/lib/pricing/engine";
+import {
+  AIRPORT_SERVICE_FEE,
+  INCLUDED_MILES,
+  ROUND_TRIP_MULTIPLIER,
+  SERVICE_RADIUS_MILES,
+  VEHICLES,
+  getVehicle,
+  vehiclesForPassengerCount,
+} from "@/lib/pricing/engine";
+import { AIRPORT_PRICING } from "@/lib/booking/pricing/data";
 import ChildSeatSelector from "./ChildSeatSelector";
 import GoogleAddressAutocomplete from "./GoogleAddressAutocomplete";
 import VehicleSelector from "./VehicleSelector";
@@ -55,6 +64,101 @@ const buttonSecondary =
   "inline-flex items-center justify-center gap-2 rounded-full border border-border bg-white px-7 py-3 text-sm font-semibold text-ink transition hover:border-ink cursor-pointer focus:outline-none focus:ring-2 focus:ring-gold focus:ring-offset-2 focus:ring-offset-cream";
 
 type ServiceCode = BookableServiceCode;
+
+/** Per-line item in the Booking Summary breakdown (Base / Mileage / etc.). */
+type BreakdownLine = { label: string; amount: number };
+
+/**
+ * Compute the pre-gratuity breakdown for an airport leg given the vehicle and
+ * known distance. Mirrors the server-side engine math so the summary's lines
+ * sum (within rounding) to `quote.data.base`. Returns `undefined` when the
+ * vehicle isn't found or the distance is unknown.
+ *
+ *  For one-way:
+ *    Base (Vehicle, includes N mi) + Mileage (extra mi × rate) + Airport fee
+ *
+ *  For round-trip we collapse to a single line so the user doesn't have to
+ *  reason about the 1.9× multiplier per component.
+ */
+function buildAirportBreakdown(
+  vehicleId: string,
+  distanceMiles: number | null,
+  roundTrip: boolean,
+): BreakdownLine[] | undefined {
+  const vehicle = getVehicle(vehicleId);
+  if (!vehicle || distanceMiles == null) return undefined;
+
+  const extraMiles = Math.max(0, distanceMiles - INCLUDED_MILES);
+  const baseFare = vehicle.airportBaseFare;
+  const mileageFare = vehicle.airportPerMile * extraMiles;
+  const oneWayLegExact = baseFare + mileageFare + AIRPORT_SERVICE_FEE;
+
+  if (roundTrip) {
+    return [
+      {
+        label: `Round-trip fare (${vehicle.name}, ${distanceMiles.toFixed(1)} mi)`,
+        amount: Math.round(oneWayLegExact * ROUND_TRIP_MULTIPLIER),
+      },
+    ];
+  }
+
+  const lines: BreakdownLine[] = [
+    {
+      label: `Base (${vehicle.name}, includes ${INCLUDED_MILES} mi)`,
+      amount: baseFare,
+    },
+  ];
+  if (extraMiles > 0) {
+    lines.push({
+      label: `Mileage (${extraMiles.toFixed(1)} mi × $${vehicle.airportPerMile.toFixed(2)})`,
+      amount: Math.round(mileageFare),
+    });
+  }
+  lines.push({ label: "Airport service fee", amount: AIRPORT_SERVICE_FEE });
+  return lines;
+}
+
+/**
+ * Point-to-point breakdown — same shape as the airport version but with the
+ * P2P base/per-mile and no airport fee. Returns `undefined` when we don't
+ * have enough info to compute (no live distance, etc.).
+ */
+function buildPointToPointBreakdown(
+  vehicleId: string,
+  distanceMiles: number | null,
+  roundTrip: boolean,
+): BreakdownLine[] | undefined {
+  const vehicle = getVehicle(vehicleId);
+  if (!vehicle || distanceMiles == null) return undefined;
+
+  const extraMiles = Math.max(0, distanceMiles - INCLUDED_MILES);
+  const baseFare = vehicle.baseFare;
+  const mileageFare = vehicle.perMile * extraMiles;
+  const oneWayExact = baseFare + mileageFare;
+
+  if (roundTrip) {
+    return [
+      {
+        label: `Round-trip fare (${vehicle.name}, ${distanceMiles.toFixed(1)} mi)`,
+        amount: Math.round(oneWayExact * ROUND_TRIP_MULTIPLIER),
+      },
+    ];
+  }
+
+  const lines: BreakdownLine[] = [
+    {
+      label: `Base (${vehicle.name}, includes ${INCLUDED_MILES} mi)`,
+      amount: baseFare,
+    },
+  ];
+  if (extraMiles > 0) {
+    lines.push({
+      label: `Mileage (${extraMiles.toFixed(1)} mi × $${vehicle.perMile.toFixed(2)})`,
+      amount: Math.round(mileageFare),
+    });
+  }
+  return lines;
+}
 
 /** Which side of the airport trip the airport sits on. */
 type AirportDirection = "from-airport" | "to-airport";
@@ -300,6 +404,55 @@ export default function TransportationBookingWizard() {
     | { kind: "error"; message: string; offending?: "pickup" | "dropoff" | "both" };
   const [quote, setQuote] = useState<QuoteState>({ kind: "idle" });
 
+  /** Cached actual driving distance from the last successful airport quote,
+      scoped to the airport+hotel pair it was measured for. Reused by the
+      local fallback while a new quote is being fetched — without this, a
+      vehicle change briefly shows the price computed at the airport's
+      baseline distance (e.g. LAX 34 mi) instead of the user's real distance,
+      which flickers as $175 → $135 once the API responds. */
+  const lastAirportQuoteRef = useRef<{
+    airport: string;
+    otherAddressPlaceId: string;
+    distanceMiles: number;
+  } | null>(null);
+
+  /** Same trick for point-to-point. Caches the actual distance per
+      pickup+dropoff pair so changing vehicle inputs reprice instantly using
+      the current vehicle's rates instead of waiting for the API roundtrip
+      (which otherwise flashes the legacy substring matcher's stale numbers). */
+  const lastP2PQuoteRef = useRef<{
+    pickupPlaceId: string;
+    dropoffPlaceId: string;
+    distanceMiles: number;
+  } | null>(null);
+
+  useEffect(() => {
+    if (
+      quote.kind === "ok" &&
+      quote.data.service === "airport-transfer" &&
+      typeof quote.data.distanceMiles === "number" &&
+      Number.isFinite(quote.data.distanceMiles)
+    ) {
+      lastAirportQuoteRef.current = {
+        airport: state.airport,
+        otherAddressPlaceId: state.otherAddressPlaceId,
+        distanceMiles: quote.data.distanceMiles,
+      };
+    }
+    if (
+      quote.kind === "ok" &&
+      quote.data.service === "point-to-point" &&
+      typeof quote.data.distanceMiles === "number" &&
+      Number.isFinite(quote.data.distanceMiles)
+    ) {
+      lastP2PQuoteRef.current = {
+        pickupPlaceId: state.pickupPlaceId,
+        dropoffPlaceId: state.dropoffPlaceId,
+        distanceMiles: quote.data.distanceMiles,
+      };
+    }
+  }, [quote, state.airport, state.otherAddressPlaceId, state.pickupPlaceId, state.dropoffPlaceId]);
+
   useEffect(() => {
     if (state.service !== "point-to-point" && state.service !== "airport-transfer") {
       setQuote({ kind: "idle" });
@@ -419,11 +572,40 @@ export default function TransportationBookingWizard() {
         pending: true,
         routeLabel: null as string | null,
         priceLabel: "Total",
+        breakdown: undefined as BreakdownLine[] | undefined,
       };
     }
 
     if (state.service === "airport-transfer") {
-      if (quote.kind === "ok" && quote.data.service === "airport-transfer") {
+      // Only trust the API quote if it was computed for the currently
+      // selected vehicle. Otherwise (the user just switched vehicles) it's
+      // a stale value that would flash for a render before the new quote
+      // arrives.
+      const apiQuoteMatchesSelection =
+        quote.kind === "ok" &&
+        quote.data.service === "airport-transfer" &&
+        quote.data.vehicle.id === state.vehicleId;
+
+      // While the user hasn't actually picked (or has just cleared) the
+      // destination, pin the distance at INCLUDED_MILES so the breakdown
+      // shows only Base + Airport fee — no speculative mileage based on a
+      // baseline distance that doesn't reflect the user's real hotel.
+      const noDestinationYet = !state.otherAddressPlaceId;
+
+      // Resolve the distance we'll show the breakdown for — preferring the
+      // API's actual distance over the cached one over the airport's baseline.
+      const distanceMiles = noDestinationYet
+        ? INCLUDED_MILES
+        : apiQuoteMatchesSelection && quote.kind === "ok" && typeof quote.data.distanceMiles === "number"
+          ? quote.data.distanceMiles
+          : lastAirportQuoteRef.current?.airport === state.airport &&
+              lastAirportQuoteRef.current?.otherAddressPlaceId === state.otherAddressPlaceId
+            ? lastAirportQuoteRef.current.distanceMiles
+            : AIRPORT_PRICING[state.airport as keyof typeof AIRPORT_PRICING]?.distanceMiles ?? null;
+
+      const breakdown = buildAirportBreakdown(state.vehicleId, distanceMiles, state.roundTrip);
+
+      if (apiQuoteMatchesSelection && quote.kind === "ok") {
         const fromLabel = state.airportDirection === "from-airport" ? state.airport : state.otherAddress || "Hotel/address";
         const toLabel = state.airportDirection === "from-airport" ? state.otherAddress || "Hotel/address" : state.airport;
         const basePrice = quote.data.base;
@@ -437,14 +619,28 @@ export default function TransportationBookingWizard() {
           pending: false,
           routeLabel: `Starts at ${fromLabel} ${state.roundTrip ? "↔" : "→"} ${toLabel}${state.roundTrip ? " (round trip)" : ""}`,
           priceLabel: "Total",
+          breakdown,
         };
       }
 
+      // Fallback path — use the cached actual distance from the last
+      // successful quote so the local preview already matches what the
+      // API is about to return. Without this we'd use the airport's
+      // baseline distance, which doesn't reflect the user's hotel. When
+      // there's no destination yet, pass INCLUDED_MILES so the price is
+      // just `base + airport fee` with no mileage, matching the breakdown.
+      const fallbackDistance = noDestinationYet
+        ? INCLUDED_MILES
+        : lastAirportQuoteRef.current?.airport === state.airport &&
+            lastAirportQuoteRef.current?.otherAddressPlaceId === state.otherAddressPlaceId
+          ? lastAirportQuoteRef.current.distanceMiles
+          : undefined;
       const pricing = calculateAirportTransferPrice(
         state.airport,
         state.vehicleId,
         state.meetAndGreet,
         state.roundTrip,
+        fallbackDistance,
       );
       if (!pricing) {
         return {
@@ -455,6 +651,7 @@ export default function TransportationBookingWizard() {
           pending: true,
           routeLabel: null,
           priceLabel: "Starts at",
+          breakdown: undefined,
         };
       }
       const subtotal = pricing.total + pricing.addOns;
@@ -470,13 +667,41 @@ export default function TransportationBookingWizard() {
         pending: quote.kind === "loading",
         routeLabel: `Starts at ${fromLabel} → ${toLabel}${state.roundTrip ? " (round trip)" : ""}`,
         priceLabel: "Starts at",
+        breakdown,
       };
     }
 
     if (state.service === "point-to-point") {
-      // PRIMARY PATH — live quote from /api/quote (Google-backed). Used as
-      // soon as both Place IDs are picked.
-      if (quote.kind === "ok") {
+      // Reject API "ok" quotes that don't match the currently selected
+      // vehicle — without this, switching from sedan → SUV flashes the
+      // sedan's price for a render before the new quote returns.
+      const apiQuoteMatchesSelection =
+        quote.kind === "ok" &&
+        quote.data.service === "point-to-point" &&
+        quote.data.vehicle.id === state.vehicleId;
+
+      const hasPlaceIds = !!state.pickupPlaceId && !!state.dropoffPlaceId;
+
+      // Resolve the distance for the breakdown + local computation:
+      //   1. API actual distance (when the quote matches the current vehicle)
+      //   2. Cached actual distance from a prior quote for this same pair
+      //   3. INCLUDED_MILES sentinel when no addresses are picked yet — that
+      //      makes the breakdown collapse to just the Base row, mirroring the
+      //      airport flow's "no destination yet" preview.
+      const distanceMiles: number | null =
+        apiQuoteMatchesSelection && quote.kind === "ok" && typeof quote.data.distanceMiles === "number"
+          ? quote.data.distanceMiles
+          : hasPlaceIds
+            ? lastP2PQuoteRef.current?.pickupPlaceId === state.pickupPlaceId &&
+              lastP2PQuoteRef.current?.dropoffPlaceId === state.dropoffPlaceId
+              ? lastP2PQuoteRef.current.distanceMiles
+              : null
+            : INCLUDED_MILES;
+
+      const breakdown = buildPointToPointBreakdown(state.vehicleId, distanceMiles, state.roundTrip);
+
+      // PRIMARY PATH — live quote from /api/quote for the current vehicle.
+      if (apiQuoteMatchesSelection && quote.kind === "ok") {
         const matched = quote.data.matchedFixedRoute;
         const distance = quote.data.distanceMiles;
         const label = matched
@@ -487,6 +712,10 @@ export default function TransportationBookingWizard() {
         const basePrice = quote.data.base;
         const gratuityAmount =
           state.gratuity === "cash" ? 0 : Math.round((basePrice * Number(state.gratuity)) / 100);
+        // Fixed-route quotes don't decompose into base + mileage — skip the
+        // breakdown for those and let the renderer fall back to the single
+        // "Trip fare" row.
+        const finalBreakdown = matched ? undefined : breakdown;
         return {
           basePrice,
           addOns: state.extraStop ? 20 : 0,
@@ -495,8 +724,43 @@ export default function TransportationBookingWizard() {
           pending: false,
           routeLabel: label,
           priceLabel: matched ? "Total" : "Starts at",
+          breakdown: finalBreakdown,
         };
       }
+
+      // SECONDARY — compute locally from the cached/known distance + current
+      // vehicle's rates. Covers vehicle switches (stale API quote), loading
+      // a fresh quote with a remembered distance, and the no-addresses-yet
+      // preview. Result lines up with what the API will return next.
+      if (distanceMiles !== null) {
+        const vehicle = getVehicle(state.vehicleId);
+        if (vehicle) {
+          const extraMiles = Math.max(0, distanceMiles - INCLUDED_MILES);
+          const oneWay = vehicle.baseFare + vehicle.perMile * extraMiles;
+          const trip = state.roundTrip ? oneWay * ROUND_TRIP_MULTIPLIER : oneWay;
+          const basePrice = Math.round(trip);
+          const addOns = state.extraStop ? 20 : 0;
+          const subtotal = basePrice + addOns;
+          const gratuityAmount =
+            state.gratuity === "cash" ? 0 : Math.round((subtotal * Number(state.gratuity)) / 100);
+          return {
+            basePrice,
+            addOns,
+            gratuity: gratuityAmount,
+            total: subtotal + gratuityAmount,
+            pending: hasPlaceIds && quote.kind === "loading",
+            routeLabel: hasPlaceIds
+              ? `Custom route (${vehicle.name})`
+              : "Pick pickup and drop-off above for a quote.",
+            priceLabel: "Starts at",
+            breakdown,
+          };
+        }
+      }
+
+      // Loading with no cached distance available (first quote ever) — show
+      // the "calculating" state with a null base so we don't display a
+      // misleading number for a route we genuinely don't know the size of.
       if (quote.kind === "loading") {
         return {
           basePrice: null as number | null,
@@ -506,6 +770,7 @@ export default function TransportationBookingWizard() {
           pending: true,
           routeLabel: "Calculating fare…",
           priceLabel: "Starts at",
+          breakdown: undefined,
         };
       }
       if (quote.kind === "error") {
@@ -517,12 +782,14 @@ export default function TransportationBookingWizard() {
           pending: true,
           routeLabel: null,
           priceLabel: "Starts at",
+          breakdown: undefined,
         };
       }
 
-      // FALLBACK — no Place IDs picked yet, or service just landed on
-      // point-to-point. Use the legacy substring matcher so the four fixed
-      // routes still preview when the user types text directly.
+      // FALLBACK — free-text typed addresses (no Place IDs). The legacy
+      // substring matcher still previews the four famous routes (SNA,
+      // Universal, Downtown LA) by name when the user hasn't picked from
+      // the autocomplete yet.
       const pricing = calculatePointToPointPrice(
         state.pickupAddress,
         state.dropoffAddress,
@@ -540,6 +807,8 @@ export default function TransportationBookingWizard() {
         pending: pricing.base === null || state.passengerGroup === "15+",
         routeLabel: pricing.routeMatch ?? "Pick pickup and drop-off above for a quote.",
         priceLabel: pricing.routeMatch ? "Total" : "Starts at",
+        // Legacy fallback is a flat fixed-route lookup — no engine breakdown.
+        breakdown: undefined,
       };
     }
 
@@ -553,10 +822,20 @@ export default function TransportationBookingWizard() {
         pending: true,
         routeLabel: "Hourly charter",
         priceLabel: "Total",
+        breakdown: undefined,
       };
     }
     const gratuityAmount =
       state.gratuity === "cash" ? 0 : Math.round((pricing.total * Number(state.gratuity)) / 100);
+    const hourlyVehicle = getVehicle(state.vehicleId);
+    const hourlyBreakdown: BreakdownLine[] | undefined = hourlyVehicle
+      ? [
+          {
+            label: `${hourlyVehicle.name} · ${pricing.billedHours} hr × $${hourlyVehicle.hourlyRate}/hr`,
+            amount: pricing.total,
+          },
+        ]
+      : undefined;
     return {
       basePrice: pricing.total,
       addOns: 0,
@@ -565,6 +844,7 @@ export default function TransportationBookingWizard() {
       pending: false,
       routeLabel: `${state.hours}-hour charter`,
       priceLabel: "Total",
+      breakdown: hourlyBreakdown,
     };
   }, [state, quote]);
 
@@ -1008,10 +1288,19 @@ export default function TransportationBookingWizard() {
             {PASSENGER_GROUPS.find((p) => p.value === state.passengerGroup)?.label ?? "—"}
           </dd>
         </div>
-        <div className="flex justify-between gap-3">
-          <dt className="text-muted">Base</dt>
-          <dd className="font-medium tabular-nums">{formatCurrency(priceSummary.basePrice)}</dd>
-        </div>
+        {priceSummary.breakdown && priceSummary.breakdown.length > 0 ? (
+          priceSummary.breakdown.map((line) => (
+            <div key={line.label} className="flex justify-between gap-3">
+              <dt className="text-muted">{line.label}</dt>
+              <dd className="font-medium tabular-nums">{formatCurrency(line.amount)}</dd>
+            </div>
+          ))
+        ) : (
+          <div className="flex justify-between gap-3">
+            <dt className="text-muted">Base</dt>
+            <dd className="font-medium tabular-nums">{formatCurrency(priceSummary.basePrice)}</dd>
+          </div>
+        )}
         {priceSummary.addOns > 0 && (
           <div className="flex justify-between gap-3">
             <dt className="text-muted">Add-ons</dt>

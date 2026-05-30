@@ -206,27 +206,28 @@ describe("computeFixedRouteQuote", () => {
 });
 
 describe("computeAirportQuote", () => {
-  it("adds $10 per leg to the base distance fare (SNA-equivalent, 14 mi)", () => {
-    // Sedan 14 mi → $85 base + $10 fee = $95 (boundary trip, no extra mileage)
+  it("adds $10 per leg to the airport base fare (SNA-equivalent, 14 mi)", () => {
+    // Sedan 14 mi → $75 airportBaseFare + $10 fee = $85 (boundary trip, no extra mileage)
     const q = computeAirportQuote({ vehicle: sedan(), miles: 14, tripType: "oneway" });
-    expect(q.base).toBe(95);
+    expect(q.base).toBe(85);
   });
 
-  it("LAX → Anaheim Sedan ~35 mi → $158", () => {
-    // 85 + (35-14)*3 = 148; +$10 = $158
+  it("LAX → Anaheim Sedan ~35 mi → $159", () => {
+    // 75 + (35-14)*3.50 = 148.50; +$10 = 158.50 → $159 (rounded)
     const q = computeAirportQuote({ vehicle: sedan(), miles: 35, tripType: "oneway" });
-    expect(q.base).toBe(158);
+    expect(q.base).toBe(159);
   });
 
   it("round-trip multiplies the per-leg total (engine + fee)", () => {
-    // one-way leg: 158; rt = 158 * 1.9 = 300.2 → $300
+    // one-way exact leg: 158.50; rt = 158.50 * 1.9 = 301.15 → $301
     const q = computeAirportQuote({ vehicle: sedan(), miles: 35, tripType: "roundtrip" });
-    expect(q.base).toBe(300);
+    expect(q.base).toBe(301);
   });
 
   it("meet & greet adds $30 once, regardless of trip type", () => {
+    // 158.50 + 30 = 188.50 → $189 (the round happens on the combined base)
     const q = computeAirportQuote({ vehicle: sedan(), miles: 35, tripType: "oneway", meetGreet: true });
-    expect(q.base).toBe(188);
+    expect(q.base).toBe(189);
     expect(MEET_GREET_FEE).toBe(30);
   });
 
@@ -235,15 +236,21 @@ describe("computeAirportQuote", () => {
   });
 
   it("can skip the airport fee for back-compat callers", () => {
-    // 85 + (35-14)*3 = 148  (no airport fee)
+    // 75 + (35-14)*3.50 = 148.50  (no airport fee) → $149
     const q = computeAirportQuote({ vehicle: sedan(), miles: 35, tripType: "oneway", includeAirportFee: false });
-    expect(q.base).toBe(148);
+    expect(q.base).toBe(149);
   });
 
   it("SAN → Anaheim Sprinter ~95 mi → $600", () => {
-    // 185 + (95-14)*5 = 590; +$10 = $600
+    // 185 + (95-14)*5 = 590; +$10 = $600 (sprinter airport rates match P2P)
     const q = computeAirportQuote({ vehicle: sprinter(), miles: 95, tripType: "oneway" });
     expect(q.base).toBe(600);
+  });
+
+  it("SUV LAX ~35 mi uses airport-specific rates ($85 + $4/mi)", () => {
+    // 85 + (35-14)*4 = 169; +$10 = $179
+    const q = computeAirportQuote({ vehicle: suv(), miles: 35, tripType: "oneway" });
+    expect(q.base).toBe(179);
   });
 });
 

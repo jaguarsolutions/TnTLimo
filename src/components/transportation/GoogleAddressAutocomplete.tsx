@@ -128,6 +128,15 @@ export default function GoogleAddressAutocomplete({
         elementRef.current = element;
         inputRef?.(element);
 
+        // Stretch the Google host element to fill the wrapper. The wrapper
+        // supplies the brand border for the unfocused state; on focus Google
+        // paints its own 2px blue inner border from a closed shadow root we
+        // can't reach (inline styles + injected shadow CSS both inert) — we
+        // live with that as the focus indicator instead of fighting it.
+        element.style.setProperty("width", "100%", "important");
+        element.style.setProperty("flex", "1", "important");
+        element.style.setProperty("background", "transparent", "important");
+
         // Style the embedded input to match our other form controls.
         applyInputStyling(element);
 
@@ -223,8 +232,23 @@ export default function GoogleAddressAutocomplete({
 
         const events = ["gmp-select", "gmp-placeselect"];
         for (const name of events) element.addEventListener(name, handler as EventListener);
+
+        // The Google web component doesn't fire any event when the user
+        // clears the input manually (or via its built-in × button), which
+        // would otherwise leave React state holding a stale Place ID. Listen
+        // on the embedded input and surface a clear via onChange with an
+        // empty sentinel so the parent can reset its state.
+        const detachClear = attachClearListener(element, () => {
+          if (cancelled) return;
+          if (process.env.NODE_ENV !== "production") {
+            console.log(`[GoogleAddressAutocomplete:${id}] input cleared → firing onChange({placeId:""})`);
+          }
+          onChange({ placeId: "", formattedAddress: "", name: undefined, location: undefined });
+        });
+
         cleanup = () => {
           for (const name of events) element.removeEventListener(name, handler as EventListener);
+          detachClear();
         };
 
         // Surface radius distance dynamically — keep alive for future tuning
@@ -281,14 +305,19 @@ export default function GoogleAddressAutocomplete({
         We never put React-rendered children in here — doing so causes
         removeChild errors when React's virtual DOM and Google's imperative
         DOM mutations disagree on what's a child of what.
+
+        The wrapper carries the visible field border. Google's web component
+        renders its own input/icon layout inside a shadow root that's hard to
+        style reliably across SDK versions — wrapping it gives users a clear,
+        consistent field boundary regardless of what Google paints inside.
       */}
       <div
         ref={containerRef}
         data-google-autocomplete={id}
-        className="relative"
+        className="relative flex items-center w-full min-h-[3rem] rounded-xl border border-[#C9BFAE] bg-white px-3 transition-colors outline-none hover:border-[#A88850] focus-within:border-[#A88850]"
         // Hidden until ready so it doesn't reserve layout space before the
         // web component upgrades.
-        style={{ display: ready ? "block" : "none" }}
+        style={{ display: ready ? "flex" : "none" }}
       />
 
       {loadError && (
@@ -329,13 +358,39 @@ function applyInputStyling(element: HTMLElement): void {
     const shadow = (element as any).shadowRoot as ShadowRoot | null;
 
     // Inject a small stylesheet inside the shadow root so the dropdown panel
-    // (also rendered inside the shadow tree) inherits light colors.
+    // (also rendered inside the shadow tree) inherits light colors AND a
+    // visible border on the input itself. Tailwind classes added via
+    // `classList` below can't reach inside the shadow tree, so without this
+    // the input has no visible boundary at all.
     if (shadow && !shadow.querySelector("style[data-tnt-light]")) {
       const style = document.createElement("style");
       style.setAttribute("data-tnt-light", "");
       style.textContent = `
         :host, :host(*), .widget-container { color-scheme: light !important; }
-        input, .widget-container { background-color: #ffffff !important; color: #111827 !important; }
+        /* Suppress the default :focus outline Google's component paints on
+           the host element — the React wrapper provides the brand gold focus
+           ring instead. :host inside shadow DOM has higher specificity than
+           an external inline style, so we have to override here. */
+        :host { outline: none !important; border: none !important; }
+        :host(:focus), :host(:focus-visible), :host(:focus-within) {
+          outline: none !important;
+          border: none !important;
+          box-shadow: none !important;
+        }
+        input, .widget-container { background-color: transparent !important; color: #111827 !important; }
+        input {
+          /* No border / padding / outline here — the React wrapper supplies
+             the bordered field. We just keep the input transparent + full
+             width so it sits flush inside the wrapper. */
+          border: none !important;
+          outline: none !important;
+          background: transparent !important;
+          width: 100% !important;
+          padding: 0 !important;
+          font-size: 0.875rem !important;
+          box-shadow: none !important;
+        }
+        input:focus { outline: none !important; box-shadow: none !important; }
         .widget-prediction, .widget-prediction *, [role="option"] { background-color: #ffffff !important; color: #111827 !important; }
         [role="option"]:hover, [role="option"][aria-selected="true"] { background-color: #f5f5f4 !important; }
       `;
@@ -348,25 +403,87 @@ function applyInputStyling(element: HTMLElement): void {
     }
     element.querySelectorAll("input").forEach((el) => targets.push(el as HTMLElement));
     for (const input of targets) {
-      input.classList.add(
-        "w-full",
-        "rounded-xl",
-        "border",
-        "border-border",
-        "bg-white",
-        "px-4",
-        "py-3",
-        "font-sans",
-        "text-sm",
-        "text-ink"
-      );
-      input.style.backgroundColor = "#ffffff";
+      // The bordered field is the React wrapper around this component — the
+      // input itself stays transparent and borderless so it sits flush
+      // inside that wrapper instead of painting a second border around an
+      // icon-width box.
+      input.style.backgroundColor = "transparent";
       input.style.color = "#111827";
       input.style.caretColor = "#111827";
       input.style.outline = "none";
+      input.style.border = "none";
+      input.style.boxShadow = "none";
+      input.style.padding = "0";
+      input.style.width = "100%";
+      input.style.fontSize = "0.875rem";
       input.style.colorScheme = "light";
     }
   });
+}
+
+/**
+ * Detect when the embedded input becomes empty (manual delete OR the web
+ * component's built-in × clear button, which sets the value programmatically
+ * and does NOT dispatch an `input` event) and invoke `onClear`.
+ *
+ * Two complementary detectors so we react quickly when the user types and
+ * still catch programmatic clears:
+ *
+ *  - `input` event listener — instant feedback for user typing
+ *  - 200 ms poll comparing the previous value to the current — catches
+ *    programmatic resets that bypass the `input` event
+ */
+function attachClearListener(element: HTMLElement, onClear: () => void): () => void {
+  let stopped = false;
+  let lastValue = "";
+  let attachedInput: HTMLInputElement | null = null;
+  let removeInputHandler: (() => void) | null = null;
+
+  const findInput = (): HTMLInputElement | null => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const shadow = (element as any).shadowRoot as ShadowRoot | null;
+    return (
+      (shadow?.querySelector("input") as HTMLInputElement | null) ??
+      (element.querySelector("input") as HTMLInputElement | null)
+    );
+  };
+
+  const attachInputHandlerOnce = (input: HTMLInputElement) => {
+    if (attachedInput === input) return;
+    removeInputHandler?.();
+    const handler = () => {
+      if (stopped) return;
+      const current = input.value;
+      if (lastValue !== "" && current === "") onClear();
+      lastValue = current;
+    };
+    input.addEventListener("input", handler);
+    attachedInput = input;
+    removeInputHandler = () => input.removeEventListener("input", handler);
+  };
+
+  const tick = () => {
+    if (stopped) return;
+    const input = findInput();
+    if (!input) return;
+    const firstTimeFound = attachedInput !== input;
+    attachInputHandlerOnce(input);
+    if (firstTimeFound && process.env.NODE_ENV !== "production") {
+      console.log("[attachClearListener] found embedded input — clear detection armed");
+    }
+    const current = input.value;
+    if (lastValue !== "" && current === "") onClear();
+    lastValue = current;
+  };
+
+  const intervalId = window.setInterval(tick, 150);
+  tick();
+
+  return () => {
+    stopped = true;
+    window.clearInterval(intervalId);
+    removeInputHandler?.();
+  };
 }
 
 /**

@@ -20,8 +20,14 @@ export interface Vehicle {
   description?: string;
   maxPassengers: number;
   maxLuggage: number;
+  /** Point-to-point base fare (includes the first INCLUDED_MILES). */
   baseFare: number;
+  /** Point-to-point per-mile rate after INCLUDED_MILES. */
   perMile: number;
+  /** Airport-leg base fare (includes the first INCLUDED_MILES). Diverges from P2P for sedan & SUV. */
+  airportBaseFare: number;
+  /** Airport-leg per-mile rate after INCLUDED_MILES. */
+  airportPerMile: number;
   /** Retained for backward compatibility with older configs. New formula doesn't need a clamp — base IS the minimum. */
   minimumFare: number;
   hourlyRate: number;
@@ -92,6 +98,16 @@ export const ROUND_TRIP_MULTIPLIER = 1.9;
 function oneWayFare(vehicle: Vehicle, distanceMiles: number): number {
   const extraMiles = Math.max(0, distanceMiles - INCLUDED_MILES);
   return (vehicle.baseFare + vehicle.perMile * extraMiles) * vehicle.suvMultiplier;
+}
+
+/**
+ * Airport-leg one-way fare. Mirrors `oneWayFare` but uses the vehicle's
+ * airport-specific base and per-mile rates so the airport flow can quote
+ * different numbers from P2P without forcing the two to share a config row.
+ */
+function oneWayAirportFare(vehicle: Vehicle, distanceMiles: number): number {
+  const extraMiles = Math.max(0, distanceMiles - INCLUDED_MILES);
+  return (vehicle.airportBaseFare + vehicle.airportPerMile * extraMiles) * vehicle.suvMultiplier;
 }
 
 /**
@@ -209,7 +225,7 @@ export function computeAirportQuote(input: AirportQuoteInput): Quote {
     throw new Error("miles must be a non-negative finite number");
   }
 
-  const oneWay = oneWayFare(vehicle, miles) + (includeAirportFee ? AIRPORT_SERVICE_FEE : 0);
+  const oneWay = oneWayAirportFare(vehicle, miles) + (includeAirportFee ? AIRPORT_SERVICE_FEE : 0);
   const trip = tripType === "roundtrip" ? oneWay * ROUND_TRIP_MULTIPLIER : oneWay;
   const meetGreetFee = meetGreet ? MEET_GREET_FEE : 0;
   const baseExact = trip + meetGreetFee;

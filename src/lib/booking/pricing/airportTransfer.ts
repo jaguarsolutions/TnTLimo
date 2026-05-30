@@ -63,7 +63,7 @@ export function calculateAirportTransferPrice(
 
 function oneWayLeg(vehicle: Vehicle, miles: number): number {
   const extraMiles = Math.max(0, miles - INCLUDED_MILES);
-  const distanceFare = vehicle.baseFare + vehicle.perMile * extraMiles;
+  const distanceFare = vehicle.airportBaseFare + vehicle.airportPerMile * extraMiles;
   return round$(distanceFare + AIRPORT_SERVICE_FEE);
 }
 
