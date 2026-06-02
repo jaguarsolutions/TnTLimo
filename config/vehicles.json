@@ -10,7 +10,7 @@
     "airportBaseFare": 75,
     "airportPerMile": 3.5,
     "minimumFare": 85,
-    "hourlyRate": 100,
+    "hourlyRate": 75,
     "hourlyMinHours": 3,
     "suvMultiplier": 1.0
   },
@@ -25,7 +25,7 @@
     "airportBaseFare": 85,
     "airportPerMile": 4.0,
     "minimumFare": 95,
-    "hourlyRate": 120,
+    "hourlyRate": 85,
     "hourlyMinHours": 3,
     "suvMultiplier": 1.0
   },
@@ -40,7 +40,7 @@
     "airportBaseFare": 120,
     "airportPerMile": 4.0,
     "minimumFare": 120,
-    "hourlyRate": 155,
+    "hourlyRate": 100,
     "hourlyMinHours": 4,
     "suvMultiplier": 1.0
   },
@@ -55,7 +55,7 @@
     "airportBaseFare": 185,
     "airportPerMile": 5.0,
     "minimumFare": 185,
-    "hourlyRate": 185,
+    "hourlyRate": 125,
     "hourlyMinHours": 4,
     "suvMultiplier": 1.0
   }

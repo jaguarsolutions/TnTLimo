@@ -206,33 +206,33 @@ describe("computeFixedRouteQuote", () => {
 });
 
 describe("computeAirportQuote", () => {
-  it("adds $10 per leg to the airport base fare (SNA-equivalent, 14 mi)", () => {
-    // Sedan 14 mi → $75 airportBaseFare + $10 fee = $85 (boundary trip, no extra mileage)
+  it("adds $5 per leg to the airport base fare (SNA-equivalent, 14 mi)", () => {
+    // Sedan 14 mi → $75 airportBaseFare + $5 fee = $80 (boundary trip, no extra mileage)
     const q = computeAirportQuote({ vehicle: sedan(), miles: 14, tripType: "oneway" });
-    expect(q.base).toBe(85);
+    expect(q.base).toBe(80);
   });
 
-  it("LAX → Anaheim Sedan ~35 mi → $159", () => {
-    // 75 + (35-14)*3.50 = 148.50; +$10 = 158.50 → $159 (rounded)
+  it("LAX → Anaheim Sedan ~35 mi → $154", () => {
+    // 75 + (35-14)*3.50 = 148.50; +$5 = 153.50 → $154 (rounded)
     const q = computeAirportQuote({ vehicle: sedan(), miles: 35, tripType: "oneway" });
-    expect(q.base).toBe(159);
+    expect(q.base).toBe(154);
   });
 
   it("round-trip doubles the per-leg total (engine + fee)", () => {
-    // one-way exact leg: 158.50; rt = 158.50 * 2 = $317
+    // one-way exact leg: 153.50; rt = 153.50 * 2 = $307
     const q = computeAirportQuote({ vehicle: sedan(), miles: 35, tripType: "roundtrip" });
-    expect(q.base).toBe(317);
+    expect(q.base).toBe(307);
   });
 
   it("meet & greet adds $30 once, regardless of trip type", () => {
-    // 158.50 + 30 = 188.50 → $189 (the round happens on the combined base)
+    // 153.50 + 30 = 183.50 → $184 (the round happens on the combined base)
     const q = computeAirportQuote({ vehicle: sedan(), miles: 35, tripType: "oneway", meetGreet: true });
-    expect(q.base).toBe(189);
+    expect(q.base).toBe(184);
     expect(MEET_GREET_FEE).toBe(30);
   });
 
   it("AIRPORT_SERVICE_FEE constant", () => {
-    expect(AIRPORT_SERVICE_FEE).toBe(10);
+    expect(AIRPORT_SERVICE_FEE).toBe(5);
   });
 
   it("can skip the airport fee for back-compat callers", () => {
@@ -241,36 +241,36 @@ describe("computeAirportQuote", () => {
     expect(q.base).toBe(149);
   });
 
-  it("SAN → Anaheim Sprinter ~95 mi → $600", () => {
-    // 185 + (95-14)*5 = 590; +$10 = $600 (sprinter airport rates match P2P)
+  it("SAN → Anaheim Sprinter ~95 mi → $595", () => {
+    // 185 + (95-14)*5 = 590; +$5 = $595 (sprinter airport rates match P2P)
     const q = computeAirportQuote({ vehicle: sprinter(), miles: 95, tripType: "oneway" });
-    expect(q.base).toBe(600);
+    expect(q.base).toBe(595);
   });
 
   it("SUV LAX ~35 mi uses airport-specific rates ($85 + $4/mi)", () => {
-    // 85 + (35-14)*4 = 169; +$10 = $179
+    // 85 + (35-14)*4 = 169; +$5 = $174
     const q = computeAirportQuote({ vehicle: suv(), miles: 35, tripType: "oneway" });
-    expect(q.base).toBe(179);
+    expect(q.base).toBe(174);
   });
 });
 
 describe("computeHourlyQuote — floors at the vehicle's hourlyMinHours", () => {
-  it("Sedan 2 hr → 3 hr × $100 = $300", () => {
+  it("Sedan 2 hr → 3 hr × $75 = $225", () => {
     const q = computeHourlyQuote({ vehicle: sedan(), hours: 2 });
-    expect(q.base).toBe(300);
+    expect(q.base).toBe(225);
     expect(q.billedHours).toBe(3);
   });
-  it("Sedan 4 hr → 4 × $100 = $400", () => {
+  it("Sedan 4 hr → 4 × $75 = $300", () => {
     const q = computeHourlyQuote({ vehicle: sedan(), hours: 4 });
-    expect(q.base).toBe(400);
+    expect(q.base).toBe(300);
   });
-  it("SUV 3 hr (min) → 3 × $120 = $360", () => {
+  it("SUV 3 hr (min) → 3 × $85 = $255", () => {
     const q = computeHourlyQuote({ vehicle: suv(), hours: 3 });
-    expect(q.base).toBe(360);
+    expect(q.base).toBe(255);
   });
-  it("Sprinter 6 hr → 6 × $185 = $1110", () => {
+  it("Sprinter 6 hr → 6 × $125 = $750", () => {
     const q = computeHourlyQuote({ vehicle: sprinter(), hours: 6 });
-    expect(q.base).toBe(1110);
+    expect(q.base).toBe(750);
   });
   it("Van honours its 4-hr minimum", () => {
     const q = computeHourlyQuote({ vehicle: van(), hours: 2 });

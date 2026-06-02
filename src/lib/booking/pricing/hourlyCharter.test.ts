@@ -2,35 +2,35 @@ import { describe, expect, it } from "vitest";
 import { calculateHourlyCharterPrice, minHoursFor } from "./hourlyCharter";
 
 describe("calculateHourlyCharterPrice — uses vehicle's hourlyRate and floors at hourlyMinHours", () => {
-  it("Sedan with 4 hr → 4 × $100 = $400", () => {
+  it("Sedan with 4 hr → 4 × $75 = $300", () => {
     const quote = calculateHourlyCharterPrice("sedan", 4);
     expect(quote).not.toBeNull();
-    expect(quote?.rate).toBe(100);
-    expect(quote?.total).toBe(400);
+    expect(quote?.rate).toBe(75);
+    expect(quote?.total).toBe(300);
     expect(quote?.billedHours).toBe(4);
   });
 
-  it("Sedan with 2 hr → bills 3-hr minimum × $100 = $300", () => {
+  it("Sedan with 2 hr → bills 3-hr minimum × $75 = $225", () => {
     const quote = calculateHourlyCharterPrice("sedan", 2);
     expect(quote?.billedHours).toBe(3);
-    expect(quote?.total).toBe(300);
+    expect(quote?.total).toBe(225);
   });
 
-  it("SUV 3 hr (min) → 3 × $120 = $360", () => {
+  it("SUV 3 hr (min) → 3 × $85 = $255", () => {
     const quote = calculateHourlyCharterPrice("suv", 3);
-    expect(quote?.rate).toBe(120);
-    expect(quote?.total).toBe(360);
+    expect(quote?.rate).toBe(85);
+    expect(quote?.total).toBe(255);
   });
 
-  it("Sprinter 4 hr → 4 × $185 = $740", () => {
+  it("Sprinter 4 hr → 4 × $125 = $500", () => {
     const quote = calculateHourlyCharterPrice("sprinter", 4);
-    expect(quote?.rate).toBe(185);
-    expect(quote?.total).toBe(740);
+    expect(quote?.rate).toBe(125);
+    expect(quote?.total).toBe(500);
   });
 
-  it("Sprinter 6 hr → 6 × $185 = $1110", () => {
+  it("Sprinter 6 hr → 6 × $125 = $750", () => {
     const quote = calculateHourlyCharterPrice("sprinter", 6);
-    expect(quote?.total).toBe(1110);
+    expect(quote?.total).toBe(750);
   });
 
   it("Van enforces its 4-hr minimum", () => {

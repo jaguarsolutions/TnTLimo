@@ -81,7 +81,7 @@ export const INCLUDED_MILES = 14;
 /** Outer service radius (miles from home base). Used for quote eligibility. */
 export const SERVICE_RADIUS_MILES = 150;
 /** Flat per-leg fee added to every airport transfer leg. */
-export const AIRPORT_SERVICE_FEE = 10;
+export const AIRPORT_SERVICE_FEE = 5;
 /** Meet & Greet add-on for airport pickups. */
 export const MEET_GREET_FEE = 30;
 export const EXTRA_STOP_FEE = 20;
