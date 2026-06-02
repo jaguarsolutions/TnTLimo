@@ -22,7 +22,7 @@ export default function HourlyCharterPage() {
         image={SITE_IMAGES.santaMonicaPalms}
         imageAlt="Hourly charter transportation on Southern California streets"
         highlights={[
-          "Minimum 4 hours for a private vehicle and driver.",
+          "3-hour minimum for sedan & SUV, 4-hour minimum for van & sprinter.",
           "Flexible itinerary planning with optional stops.",
           "Ideal for conventions, weddings, and family outings.",
           "Child seats available upon request at no extra charge.",

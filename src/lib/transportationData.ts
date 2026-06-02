@@ -138,7 +138,7 @@ export const TRANSPORTATION_SERVICE_DETAILS = {
     shortDescription:
       "Private hourly transportation for events, group outings, and custom local schedules.",
     bullets: [
-      "Minimum 4 hours with professional driver and private vehicle.",
+      "3-hour minimum for sedan & SUV, 4-hour minimum for van & sprinter.",
       "Flexible stops and itinerary planning available.",
       "Great for conventions, weddings, and family days out.",
       "Child seats are available at no extra charge.",
