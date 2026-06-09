@@ -31,34 +31,5 @@
       "placeIds": []
     }
   },
-  "routes": [
-    {
-      "id": "anaheim-lax",
-      "label": "Anaheim → LAX",
-      "from": "anaheim-disneyland",
-      "to": "lax",
-      "price": 225
-    },
-    {
-      "id": "anaheim-sna",
-      "label": "Anaheim → SNA",
-      "from": "anaheim-disneyland",
-      "to": "sna",
-      "price": 95
-    },
-    {
-      "id": "anaheim-universal",
-      "label": "Anaheim → Universal Studios",
-      "from": "anaheim-disneyland",
-      "to": "universal-studios",
-      "price": 120
-    },
-    {
-      "id": "anaheim-downtown-la",
-      "label": "Anaheim → Downtown LA",
-      "from": "anaheim-disneyland",
-      "to": "downtown-la",
-      "price": 150
-    }
-  ]
+  "routes": []
 }

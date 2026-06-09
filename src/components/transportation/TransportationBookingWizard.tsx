@@ -562,12 +562,33 @@ export default function TransportationBookingWizard() {
     state.meetAndGreet,
   ]);
 
+  /** Tracks the previously-rendered passenger group so we can reset the
+      vehicle to the cheapest eligible option when the group ACTUALLY
+      changes (not just on the initial mount or when the user clicks a
+      different vehicle within the same group). */
+  const lastPassengerGroupRef = useRef(state.passengerGroup);
+
   useEffect(() => {
     const passengerCount = passengersFromGroup(state.passengerGroup);
     const eligibleVehicles = vehiclesForPassengerCount(passengerCount);
-    const firstEligible = eligibleVehicles[0]?.id ?? "";
-    if (!eligibleVehicles.some((v) => v.id === state.vehicleId)) {
-      setState((current) => ({ ...current, vehicleId: firstEligible }));
+    // VEHICLES is sorted small → large in config/vehicles.json, so the first
+    // vehicle that fits is the cheapest tier for this passenger count.
+    const cheapestEligible = eligibleVehicles[0]?.id ?? "";
+
+    const groupChanged = lastPassengerGroupRef.current !== state.passengerGroup;
+    lastPassengerGroupRef.current = state.passengerGroup;
+
+    if (groupChanged) {
+      // Always snap back to the cheapest eligible tier when the group
+      // changes — e.g. 5–6 → 1–4 should reset from SUV/Sprinter back to
+      // Sedan rather than carrying the previous (more expensive) selection.
+      if (state.vehicleId !== cheapestEligible) {
+        setState((current) => ({ ...current, vehicleId: cheapestEligible }));
+      }
+    } else if (!eligibleVehicles.some((v) => v.id === state.vehicleId)) {
+      // Safety net: current selection is no longer eligible for any other
+      // reason (URL deep-link, manual state edit) — fall back to cheapest.
+      setState((current) => ({ ...current, vehicleId: cheapestEligible }));
     }
   }, [state.passengerGroup, state.vehicleId]);
 

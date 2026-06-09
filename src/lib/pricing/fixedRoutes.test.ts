@@ -28,29 +28,22 @@ describe("anchor matching", () => {
   });
 });
 
-describe("lookupFixedRoute (verification step #7)", () => {
-  it("Disneyland → LAX returns anaheim-lax @ $225", () => {
+describe("lookupFixedRoute (no flat overrides — engine handles all routes)", () => {
+  // The published anchor pairs no longer have flat-price overrides; every
+  // route resolves through the engine so prices vary by vehicle. Anchor
+  // matching itself is still exercised above so the data is ready when /
+  // if a per-route override is reintroduced.
+  it("Disneyland → LAX returns null (no flat override)", () => {
     const route = lookupFixedRoute({
       pickupPlaceId: "test_disney",
       pickupLocation: DISNEYLAND_HOTEL,
       dropoffPlaceId: "test_lax",
       dropoffLocation: LAX,
     });
-    expect(route?.id).toBe("anaheim-lax");
-    expect(route?.price).toBe(225);
+    expect(route).toBeNull();
   });
 
-  it("LAX → Disneyland (reverse direction) also matches anaheim-lax", () => {
-    const route = lookupFixedRoute({
-      pickupPlaceId: "test_lax",
-      pickupLocation: LAX,
-      dropoffPlaceId: "test_disney",
-      dropoffLocation: DISNEYLAND_HOTEL,
-    });
-    expect(route?.id).toBe("anaheim-lax");
-  });
-
-  it("Disneyland → Knott's returns null (not a fixed route)", () => {
+  it("Disneyland → Knott's returns null (not an anchor pair)", () => {
     const route = lookupFixedRoute({
       pickupPlaceId: "test_disney",
       pickupLocation: DISNEYLAND_HOTEL,
@@ -75,11 +68,7 @@ describe("config integrity", () => {
     );
   });
 
-  it("loads the 4 expected routes", () => {
-    expect(FIXED_ROUTES).toHaveLength(4);
-    expect(FIXED_ROUTES.find((r) => r.id === "anaheim-lax")?.price).toBe(225);
-    expect(FIXED_ROUTES.find((r) => r.id === "anaheim-sna")?.price).toBe(95);
-    expect(FIXED_ROUTES.find((r) => r.id === "anaheim-universal")?.price).toBe(120);
-    expect(FIXED_ROUTES.find((r) => r.id === "anaheim-downtown-la")?.price).toBe(150);
+  it("ships with no flat-price route overrides — all trips quote through the engine", () => {
+    expect(FIXED_ROUTES).toHaveLength(0);
   });
 });
