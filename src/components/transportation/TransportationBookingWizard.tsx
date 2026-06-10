@@ -2528,7 +2528,7 @@ export default function TransportationBookingWizard() {
   /* ── Layout ───────────────────────────────────────────── */
 
   return (
-    <section className="max-w-6xl mx-auto px-4 sm:px-8 lg:px-12 pt-12 pb-32 sm:pb-20">
+    <section className="max-w-6xl mx-auto px-4 sm:px-8 lg:px-12 pt-12 pb-36 lg:pb-20">
       <div className="text-center max-w-2xl mx-auto mb-10">
         <span className="inline-flex items-center gap-2 rounded-full bg-gold/10 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.2em] text-gold">
           Transportation booking
@@ -2612,23 +2612,9 @@ export default function TransportationBookingWizard() {
             </div>
           )}
 
-          {step < TOTAL_STEPS && (
-            <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-white px-4 py-3 shadow-[0_-16px_30px_-18px_rgba(12,11,10,0.18)] lg:hidden">
-              <div className="flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  {priceSummary.routeLabel && (
-                    <p className="truncate text-xs text-muted">{priceSummary.routeLabel}</p>
-                  )}
-                  <p className="truncate text-sm font-semibold text-ink">
-                    {priceSummary.total !== null ? formatCurrency(priceSummary.total) : "Quote pending"}
-                  </p>
-                </div>
-                <button type="button" onClick={handleNext} className={`${buttonPrimary} min-w-[150px] py-2`}>
-                  Continue →
-                </button>
-              </div>
-            </div>
-          )}
+          {/* The mobile/tablet sticky pricing bar lives at the bottom of the
+              page (after </aside>) — a single bar covers all sub-lg widths
+              so it doesn't double up with another sticky element here. */}
         </div>
 
         <aside className="hidden lg:block">
@@ -2650,43 +2636,107 @@ export default function TransportationBookingWizard() {
         </aside>
       </div>
 
-      {/* Mobile sticky bottom: total + continue */}
-      {step < TOTAL_STEPS && (
-        <div className="sm:hidden fixed bottom-0 inset-x-0 z-40 border-t border-border bg-white/95 backdrop-blur-md px-4 pt-3 pb-[calc(env(safe-area-inset-bottom)+12px)] shadow-[0_-4px_20px_rgba(12,11,10,0.08)]">
-          <div className="flex items-center justify-between gap-3">
-            <div className="min-w-0">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">Estimated total</p>
-              <p className="font-display text-lg font-semibold text-ink tabular-nums truncate">
-                {priceSummary.total !== null ? formatCurrency(priceSummary.total) : "—"}
-              </p>
-            </div>
-            <div className="flex gap-2 shrink-0">
-              {step > 1 && (
+      {/* Mobile / tablet sticky pricing bar — visible on all viewports below
+          `lg` (where the desktop sidebar takes over). Shows total + the
+          context line (vehicle · distance · gratuity treatment) so the
+          customer knows what they're paying for at a glance. */}
+      {step < TOTAL_STEPS && (() => {
+        const stickyVehicle = getVehicle(state.vehicleId);
+        const stickyDistance = ((): number | null => {
+          if (state.service === "airport-transfer") {
+            if (
+              quote.kind === "ok" &&
+              quote.data.service === "airport-transfer" &&
+              quote.data.vehicle.id === state.vehicleId &&
+              typeof quote.data.distanceMiles === "number"
+            ) {
+              return quote.data.distanceMiles;
+            }
+            if (
+              lastAirportQuoteRef.current?.airport === state.airport &&
+              lastAirportQuoteRef.current?.otherAddressPlaceId === state.otherAddressPlaceId
+            ) {
+              return lastAirportQuoteRef.current.distanceMiles;
+            }
+            return null;
+          }
+          if (state.service === "point-to-point") {
+            if (
+              quote.kind === "ok" &&
+              quote.data.service === "point-to-point" &&
+              quote.data.vehicle.id === state.vehicleId &&
+              typeof quote.data.distanceMiles === "number"
+            ) {
+              return quote.data.distanceMiles;
+            }
+            if (
+              lastP2PQuoteRef.current?.pickupPlaceId === state.pickupPlaceId &&
+              lastP2PQuoteRef.current?.dropoffPlaceId === state.dropoffPlaceId
+            ) {
+              return lastP2PQuoteRef.current.distanceMiles;
+            }
+            return null;
+          }
+          return null;
+        })();
+        const stickyContextParts: string[] = [];
+        if (stickyVehicle?.name) stickyContextParts.push(stickyVehicle.name);
+        if (state.service === "hourly-charter") {
+          stickyContextParts.push(`${state.hours} hr`);
+        } else if (stickyDistance != null) {
+          stickyContextParts.push(`${stickyDistance.toFixed(1)} mi`);
+        }
+        stickyContextParts.push(
+          state.gratuity === "cash" ? "Gratuity at pickup" : "Includes gratuity",
+        );
+        const stickyContext = stickyContextParts.join(" · ");
+
+        return (
+          <div className="lg:hidden fixed bottom-0 inset-x-0 z-40 border-t border-border bg-white/95 backdrop-blur-md px-4 pt-3 pb-[calc(env(safe-area-inset-bottom)+12px)] shadow-[0_-4px_20px_rgba(12,11,10,0.08)]">
+            <div className="flex items-center justify-between gap-3 max-w-2xl mx-auto">
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted leading-none">
+                  {priceSummary.priceLabel || "Estimated total"}
+                </p>
+                <p
+                  className={`font-display text-xl font-semibold text-ink tabular-nums leading-tight transition-opacity duration-200 ${
+                    priceSummary.pending ? "opacity-60" : "opacity-100"
+                  }`}
+                >
+                  {priceSummary.total !== null ? formatCurrency(priceSummary.total) : "—"}
+                </p>
+                <p className="mt-0.5 text-[11px] text-muted leading-snug truncate">
+                  {stickyContext}
+                </p>
+              </div>
+              <div className="flex gap-2 shrink-0">
+                {step > 1 && (
+                  <button
+                    type="button"
+                    onClick={handleBack}
+                    className="px-4 py-3 rounded-full border border-border bg-white text-sm font-semibold text-ink min-h-[44px] active:scale-[0.96] transition-transform"
+                    aria-label="Go back to previous step"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.4} aria-hidden="true">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                    </svg>
+                  </button>
+                )}
                 <button
                   type="button"
-                  onClick={handleBack}
-                  className="px-4 py-3 rounded-full border border-border bg-white text-sm font-semibold text-ink min-h-[44px] active:scale-[0.96] transition-transform"
-                  aria-label="Go back to previous step"
+                  onClick={handleNext}
+                  className="inline-flex items-center gap-1.5 px-5 py-3 rounded-full bg-ink text-white text-sm font-semibold min-h-[44px] active:scale-[0.96] transition-transform"
                 >
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.4} aria-hidden="true">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                  {step === 5 ? "Confirm" : "Continue"}
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.6} aria-hidden="true">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
                   </svg>
                 </button>
-              )}
-              <button
-                type="button"
-                onClick={handleNext}
-                className="inline-flex items-center gap-1.5 px-5 py-3 rounded-full bg-ink text-white text-sm font-semibold min-h-[44px] active:scale-[0.96] transition-transform"
-              >
-                {step === 5 ? "Confirm" : "Continue"}
-                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.6} aria-hidden="true">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                </svg>
-              </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </section>
   );
 }
