@@ -39,11 +39,13 @@ import VehicleSelector from "./VehicleSelector";
 
 const WEB3_KEY = process.env.NEXT_PUBLIC_WEB3FORMS_ACCESS_KEY ?? "";
 
-const TOTAL_STEPS = 6;
+const TOTAL_STEPS = 5;
+// Trip + Passengers are merged into one step — the passenger group drives
+// the vehicle default, so making them separate steps doubled navigation
+// without adding clarity.
 const STEP_LABELS_SHORT = [
   "Service",
   "Trip",
-  "Passengers",
   "Contact",
   "Review",
   "Confirm",
@@ -424,6 +426,11 @@ export default function TransportationBookingWizard() {
     | { kind: "ok"; data: LiveQuote }
     | { kind: "error"; message: string; offending?: "pickup" | "dropoff" | "both" };
   const [quote, setQuote] = useState<QuoteState>({ kind: "idle" });
+
+  /** Step-5 gratuity picker is collapsed by default — the Review page reads
+      as confirmation rather than another decision. Default 20% comes from
+      `INITIAL_STATE.gratuity`; this state only controls visibility. */
+  const [showGratuityPicker, setShowGratuityPicker] = useState(false);
 
   /** Cached actual driving distance from the last successful airport quote,
       scoped to the airport+hotel pair it was measured for. Reused by the
@@ -988,7 +995,8 @@ export default function TransportationBookingWizard() {
       }
     }
 
-    if (currentStep === 3) {
+    // Passenger / vehicle / luggage validation merged into step 2 below.
+    if (currentStep === 2) {
       if (!state.passengerGroup) errs.passengerGroup = "Choose a passenger group.";
       const passengerCount = passengersFromGroup(state.passengerGroup);
       const eligibleVehicles = vehiclesForPassengerCount(passengerCount);
@@ -998,7 +1006,7 @@ export default function TransportationBookingWizard() {
       if (state.luggageCount < 0) errs.luggage = "Luggage count can't be negative.";
     }
 
-    if (currentStep === 4) {
+    if (currentStep === 3) {
       if (!state.firstName.trim()) errs.firstName = "Enter your first name.";
       if (!state.lastName.trim()) errs.lastName = "Enter your last name.";
       if (!isValidEmail(state.email)) errs.email = "Enter a valid email address.";
@@ -1453,7 +1461,7 @@ export default function TransportationBookingWizard() {
   const Step1 = (
     <>
       <StepHeader
-        eyebrow="Step 1 of 6"
+        eyebrow="Step 1 of 5"
         title="What kind of ride do you need?"
         subtitle="Pick the option that matches your trip — we’ll only ask the questions that apply."
       />
@@ -1461,10 +1469,99 @@ export default function TransportationBookingWizard() {
     </>
   );
 
+  /** JSX fragment for the passenger / vehicle / luggage / child-seats group.
+      Used to be its own step but merged into Step 2 so the wizard reads as
+      five steps instead of six. Declared before Step2 so JS init order is
+      satisfied (Step2 references it). */
+  const PassengersBlock = (
+    <>
+      {/* Visual divider — separates trip details from "who's riding" without
+          needing a whole step. Matches the spacing between other blocks. */}
+      <div className="pt-2 border-t border-border/60">
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-gold mt-4">
+          Who&apos;s riding
+        </p>
+      </div>
+
+      <div>
+        <span className={labelClass}>Passenger group <RequiredMark /></span>
+        <div
+          className="grid grid-cols-3 sm:grid-cols-3 lg:grid-cols-6 gap-2"
+          role="radiogroup"
+          aria-label="Passenger group"
+        >
+          {PASSENGER_GROUPS.map((option) => {
+            const selected = state.passengerGroup === option.value;
+            return (
+              <button
+                key={option.value}
+                type="button"
+                role="radio"
+                aria-checked={selected}
+                onClick={() => handleField("passengerGroup", option.value)}
+                className={`flex flex-col items-center justify-center px-2 py-3 min-h-[64px] rounded-xl border-2 transition cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-cream ${
+                  selected
+                    ? "border-gold bg-gold/10 text-ink"
+                    : "border-border bg-white text-muted hover:border-ink/40"
+                }`}
+              >
+                <span className={`text-sm font-semibold leading-tight ${selected ? "text-ink" : "text-ink/85"}`}>
+                  {option.label.replace(" passengers", "")}
+                </span>
+                <span className="mt-0.5 text-[10px] font-normal leading-tight text-muted">
+                  passengers
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {shouldShowGroupQuoteMessage(state.passengerGroup) && (
+        <div className="rounded-2xl border border-sunset/20 bg-sunset/10 p-4 text-sm text-ink">
+          <p className="font-semibold">Groups over 14 passengers</p>
+          <p className="mt-1 text-muted">
+            Call <a href={SITE_CONTACT.phoneHref} className="text-gold underline">{SITE_CONTACT.phoneDisplay}</a> or finish the form and we&apos;ll quote a multi-vehicle setup.
+          </p>
+        </div>
+      )}
+
+      {state.service !== "point-to-point" && (
+        <VehicleSelector
+          label="Vehicle"
+          description="Choose the vehicle that best fits your group size and luggage."
+          vehicles={vehiclesForPassengerCount(passengersFromGroup(state.passengerGroup))}
+          selectedId={state.vehicleId}
+          onSelect={(vehicleId) => handleField("vehicleId", vehicleId)}
+          hours={state.service === "hourly-charter" ? state.hours : undefined}
+        />
+      )}
+
+      <div className={fieldGroup}>
+        <div>
+          <span className={labelClass}>Luggage</span>
+          <NumberStepper
+            value={state.luggageCount}
+            min={0}
+            max={20}
+            ariaLabel="Luggage count"
+            onChange={(v) => handleField("luggageCount", v)}
+          />
+          <p className="mt-2 text-xs text-muted">Bags, suitcases, strollers — give us a ballpark.</p>
+        </div>
+      </div>
+
+      <ChildSeatSelector
+        selected={state.childSeats}
+        onChange={(next) => handleField("childSeats", next)}
+      />
+    </>
+  );
+
   const Step2 = (
     <>
       <StepHeader
-        eyebrow="Step 2 of 6"
+        eyebrow="Step 2 of 5"
         title="Trip details"
         subtitle="The fields change with the service you picked. Required fields are marked with an asterisk."
       />
@@ -1989,97 +2086,15 @@ export default function TransportationBookingWizard() {
           </div>
         </div>
       )}
-    </>
-  );
 
-  const Step3 = (
-    <>
-      <StepHeader
-        eyebrow="Step 3 of 6"
-        title="Who’s riding?"
-        subtitle="Helps us match the right vehicle and seats."
-      />
-
-      <div>
-        <span className={labelClass}>Passenger group <RequiredMark /></span>
-        <div
-          className="grid grid-cols-3 sm:grid-cols-3 lg:grid-cols-6 gap-2"
-          role="radiogroup"
-          aria-label="Passenger group"
-        >
-          {PASSENGER_GROUPS.map((option, idx) => {
-            const selected = state.passengerGroup === option.value;
-            return (
-              <button
-                key={option.value}
-                type="button"
-                role="radio"
-                aria-checked={selected}
-                ref={idx === 0 ? (el) => { firstFieldRef.current = el; } : undefined}
-                onClick={() => handleField("passengerGroup", option.value)}
-                className={`flex flex-col items-center justify-center px-2 py-3 min-h-[64px] rounded-xl border-2 transition cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-cream ${
-                  selected
-                    ? "border-gold bg-gold/10 text-ink"
-                    : "border-border bg-white text-muted hover:border-ink/40"
-                }`}
-              >
-                <span className={`text-sm font-semibold leading-tight ${selected ? "text-ink" : "text-ink/85"}`}>
-                  {option.label.replace(" passengers", "")}
-                </span>
-                <span className="mt-0.5 text-[10px] font-normal leading-tight text-muted">
-                  passengers
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {shouldShowGroupQuoteMessage(state.passengerGroup) && (
-        <div className="rounded-2xl border border-sunset/20 bg-sunset/10 p-4 text-sm text-ink">
-          <p className="font-semibold">Groups over 14 passengers</p>
-          <p className="mt-1 text-muted">
-            Call <a href={SITE_CONTACT.phoneHref} className="text-gold underline">{SITE_CONTACT.phoneDisplay}</a> or finish the form and we’ll quote a multi-vehicle setup.
-          </p>
-        </div>
-      )}
-
-      {state.service !== "point-to-point" && (
-        <VehicleSelector
-          label="Vehicle"
-          description="Choose the vehicle that best fits your group size and luggage."
-          vehicles={vehiclesForPassengerCount(passengersFromGroup(state.passengerGroup))}
-          selectedId={state.vehicleId}
-          onSelect={(vehicleId) => handleField("vehicleId", vehicleId)}
-          hours={state.service === "hourly-charter" ? state.hours : undefined}
-        />
-      )}
-
-      <div className={fieldGroup}>
-        <div>
-          <span className={labelClass}>Luggage</span>
-          <NumberStepper
-            value={state.luggageCount}
-            min={0}
-            max={20}
-            ariaLabel="Luggage count"
-            onChange={(v) => handleField("luggageCount", v)}
-          />
-          <p className="mt-2 text-xs text-muted">Bags, suitcases, strollers — give us a ballpark.</p>
-        </div>
-      </div>
-
-      <ChildSeatSelector
-        selected={state.childSeats}
-        onChange={(next) => handleField("childSeats", next)}
-      />
+      {PassengersBlock}
     </>
   );
 
   const Step4 = (
     <>
       <StepHeader
-        eyebrow="Step 4 of 6"
+        eyebrow="Step 3 of 5"
         title="Your contact info"
         subtitle="So we can reach you with confirmation and pickup details."
       />
@@ -2161,7 +2176,7 @@ export default function TransportationBookingWizard() {
   const Step5 = (
     <>
       <StepHeader
-        eyebrow="Step 5 of 6"
+        eyebrow="Step 4 of 5"
         title="Review your booking"
         subtitle="Take a quick look. You can jump back to any step from the progress bar above."
       />
@@ -2240,7 +2255,9 @@ export default function TransportationBookingWizard() {
 
         <ReviewBlock
           title="Passengers"
-          onEdit={() => goToStep(3)}
+          // Passengers / vehicle / luggage live at the bottom of Step 2 since
+          // the merge — editing jumps back to step 2 rather than the old step 3.
+          onEdit={() => goToStep(2)}
           rows={[
             { label: "Group", value: PASSENGER_GROUPS.find((p) => p.value === state.passengerGroup)?.label ?? "—" },
             { label: "Vehicle", value: VEHICLES.find((v) => v.id === state.vehicleId)?.name ?? "Standard" },
@@ -2256,7 +2273,7 @@ export default function TransportationBookingWizard() {
 
         <ReviewBlock
           title="Contact"
-          onEdit={() => goToStep(4)}
+          onEdit={() => goToStep(3)}
           rows={[
             { label: "Name", value: `${state.firstName} ${state.lastName}`.trim() || "—" },
             { label: "Email", value: state.email || "—" },
@@ -2265,63 +2282,104 @@ export default function TransportationBookingWizard() {
           ]}
         />
 
-        <div className="rounded-2xl border border-border bg-white p-5">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted mb-3">
-            Gratuity
-          </p>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2" role="radiogroup" aria-label="Gratuity amount">
-            {GRATUITY_OPTIONS.map((option) => {
-              const selected = state.gratuity === option.value;
-              // Live dollar preview for each tier — much clearer than just "20%".
-              const subtotal =
-                (priceSummary.basePrice ?? 0) + priceSummary.addOns;
-              const previewCents =
-                option.value === "cash"
-                  ? null
-                  : Math.round(subtotal * (Number(option.value) / 100) * 100);
-              const previewLabel =
-                option.value === "cash"
-                  ? "Paid to driver"
-                  : previewCents !== null && subtotal > 0
-                    ? formatCurrency(previewCents / 100)
-                    : null;
-              return (
+        {/* Gratuity — collapsed by default so the Review reads as confirmation
+            rather than another decision. 20% is the pre-selected default
+            (`INITIAL_STATE.gratuity`); the tier picker only opens when the
+            user taps "Change". */}
+        {(() => {
+          const subtotal = (priceSummary.basePrice ?? 0) + priceSummary.addOns;
+          const currentLabel =
+            GRATUITY_OPTIONS.find((o) => o.value === state.gratuity)?.label ?? "20%";
+          const currentAmount =
+            state.gratuity === "cash"
+              ? "Paid to driver"
+              : subtotal > 0
+                ? formatCurrency(Math.round(subtotal * (Number(state.gratuity) / 100)))
+                : null;
+
+          return (
+            <div className="rounded-2xl border border-border bg-white p-5">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted">
+                    Gratuity
+                  </p>
+                  <p className="mt-1 font-sans text-sm text-ink">
+                    <span className="font-semibold">{currentLabel}</span>
+                    {currentAmount && (
+                      <span className="text-muted"> · {currentAmount}</span>
+                    )}
+                  </p>
+                </div>
                 <button
-                  key={option.value}
                   type="button"
-                  role="radio"
-                  aria-checked={selected}
-                  onClick={() => handleField("gratuity", option.value)}
-                  className={`relative flex flex-col items-center justify-center px-3 py-3 min-h-[68px] rounded-xl border-2 transition cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-cream ${
-                    selected
-                      ? "border-gold bg-gold/10"
-                      : "border-border bg-white hover:border-ink/40"
-                  }`}
+                  onClick={() => setShowGratuityPicker((v) => !v)}
+                  className="shrink-0 inline-flex items-center gap-1 rounded-full border border-border bg-white px-3 py-1.5 text-xs font-semibold text-ink hover:border-ink/60 transition-colors cursor-pointer"
+                  aria-expanded={showGratuityPicker}
+                  aria-controls="gratuity-picker"
                 >
-                  <span
-                    className={`text-sm font-semibold ${
-                      selected ? "text-ink" : "text-ink/85"
-                    }`}
-                  >
-                    {option.label}
-                  </span>
-                  {previewLabel && (
-                    <span
-                      className={`mt-1 text-xs tabular-nums ${
-                        selected ? "text-ink/70" : "text-muted"
-                      }`}
-                    >
-                      {previewLabel}
-                    </span>
-                  )}
+                  {showGratuityPicker ? "Done" : "Change"}
                 </button>
-              );
-            })}
-          </div>
-          <p className="mt-3 text-xs text-muted">
-            Gratuity is included in your estimated total above (except &ldquo;cash at pickup&rdquo;, which you hand to the driver).
-          </p>
-        </div>
+              </div>
+
+              {showGratuityPicker && (
+                <div
+                  id="gratuity-picker"
+                  className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-2"
+                  role="radiogroup"
+                  aria-label="Gratuity amount"
+                >
+                  {GRATUITY_OPTIONS.map((option) => {
+                    const selected = state.gratuity === option.value;
+                    const previewLabel =
+                      option.value === "cash"
+                        ? "Paid to driver"
+                        : subtotal > 0
+                          ? formatCurrency(
+                              Math.round(subtotal * (Number(option.value) / 100)),
+                            )
+                          : null;
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        role="radio"
+                        aria-checked={selected}
+                        onClick={() => handleField("gratuity", option.value)}
+                        className={`relative flex flex-col items-center justify-center px-3 py-3 min-h-[68px] rounded-xl border-2 transition cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-cream ${
+                          selected
+                            ? "border-gold bg-gold/10"
+                            : "border-border bg-white hover:border-ink/40"
+                        }`}
+                      >
+                        <span
+                          className={`text-sm font-semibold ${
+                            selected ? "text-ink" : "text-ink/85"
+                          }`}
+                        >
+                          {option.label}
+                        </span>
+                        {previewLabel && (
+                          <span
+                            className={`mt-1 text-xs tabular-nums ${
+                              selected ? "text-ink/70" : "text-muted"
+                            }`}
+                          >
+                            {previewLabel}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              <p className="mt-3 text-xs text-muted">
+                Gratuity is included in your estimated total above (except &ldquo;cash at pickup&rdquo;, which you hand to the driver).
+              </p>
+            </div>
+          );
+        })()}
       </div>
     </>
   );
@@ -2385,6 +2443,45 @@ export default function TransportationBookingWizard() {
                 PASSENGER_GROUPS.find((p) => p.value === state.passengerGroup)?.label ?? "—"
               }
             />
+            {(() => {
+              // Vehicle + distance summary — last-mile reassurance that the
+              // selected class and trip length match what the customer expects.
+              const v = getVehicle(state.vehicleId);
+              const dist =
+                quote.kind === "ok" &&
+                quote.data.vehicle.id === state.vehicleId &&
+                typeof quote.data.distanceMiles === "number"
+                  ? quote.data.distanceMiles
+                  : state.service === "airport-transfer"
+                    ? lastAirportQuoteRef.current?.airport === state.airport &&
+                      lastAirportQuoteRef.current?.otherAddressPlaceId === state.otherAddressPlaceId
+                      ? lastAirportQuoteRef.current.distanceMiles
+                      : null
+                    : state.service === "point-to-point"
+                      ? lastP2PQuoteRef.current?.pickupPlaceId === state.pickupPlaceId &&
+                        lastP2PQuoteRef.current?.dropoffPlaceId === state.dropoffPlaceId
+                        ? lastP2PQuoteRef.current.distanceMiles
+                        : null
+                      : null;
+              const vehicleValue = state.service === "hourly-charter"
+                ? `${v?.name ?? "Standard"} · ${state.hours} hr`
+                : dist != null
+                  ? `${v?.name ?? "Standard"} · ${dist.toFixed(1)} mi`
+                  : v?.name ?? "Standard";
+              return (
+                <SummaryRow
+                  icon={
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8} aria-hidden="true">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 13l2-7h14l2 7M5 13h14m-14 0v6a1 1 0 001 1h2a1 1 0 001-1v-2h8v2a1 1 0 001 1h2a1 1 0 001-1v-6" />
+                      <circle cx="8" cy="16" r="1.4" fill="currentColor" />
+                      <circle cx="16" cy="16" r="1.4" fill="currentColor" />
+                    </svg>
+                  }
+                  label="Vehicle"
+                  value={vehicleValue}
+                />
+              );
+            })()}
             {priceSummary.routeLabel && (
               <SummaryRow
                 icon={
@@ -2413,7 +2510,7 @@ export default function TransportationBookingWizard() {
 
           <button
             type="button"
-            onClick={() => goToStep(5)}
+            onClick={() => goToStep(4)}
             className="mt-4 inline-flex items-center gap-1.5 font-sans text-xs font-semibold text-muted hover:text-ink transition-colors"
           >
             <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.4} aria-hidden="true">
@@ -2534,7 +2631,7 @@ export default function TransportationBookingWizard() {
           Transportation booking
         </span>
         <h1 className="mt-5 font-display text-3xl sm:text-4xl md:text-5xl font-semibold text-ink leading-tight">
-          Book your ride in six quick steps.
+          Book your ride in five quick steps.
         </h1>
         <p className="mt-4 text-sm sm:text-base text-muted leading-relaxed">
           Airport transfers, point-to-point trips, and hourly charters across Anaheim, Orange County, and Los Angeles.
@@ -2582,12 +2679,12 @@ export default function TransportationBookingWizard() {
                 exit={reducedMotion ? { opacity: 0 } : { opacity: 0, x: stepDirection * -28 }}
                 transition={{ duration: 0.32, ease: [0.23, 1, 0.32, 1] }}
               >
+                {/* Step3 (Passengers) was merged into Step2 — see PassengersBlock. */}
                 {step === 1 && Step1}
                 {step === 2 && Step2}
-                {step === 3 && Step3}
-                {step === 4 && Step4}
-                {step === 5 && Step5}
-                {step === 6 && Step6}
+                {step === 3 && Step4}
+                {step === 4 && Step5}
+                {step === 5 && Step6}
               </motion.div>
             </AnimatePresence>
           </div>
@@ -2727,7 +2824,7 @@ export default function TransportationBookingWizard() {
                   onClick={handleNext}
                   className="inline-flex items-center gap-1.5 px-5 py-3 rounded-full bg-ink text-white text-sm font-semibold min-h-[44px] active:scale-[0.96] transition-transform"
                 >
-                  {step === 5 ? "Confirm" : "Continue"}
+                  {step === 4 ? "Confirm" : "Continue"}
                   <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.6} aria-hidden="true">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
                   </svg>
