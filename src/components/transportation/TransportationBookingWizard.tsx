@@ -39,6 +39,58 @@ import VehicleSelector from "./VehicleSelector";
 
 const WEB3_KEY = process.env.NEXT_PUBLIC_WEB3FORMS_ACCESS_KEY ?? "";
 
+/** sessionStorage key for the in-progress booking draft. sessionStorage (not
+ *  localStorage) so the draft naturally clears when the user closes the tab —
+ *  short-lived persistence to survive accidental refreshes, no long-lived PII. */
+const DRAFT_STORAGE_KEY = "tnt-booking-draft-v1";
+
+/** Shape stored in sessionStorage. Versioned via the key so we can break the
+ *  schema later by bumping `-v1` → `-v2` and naturally ignoring stale drafts. */
+interface BookingDraft {
+  step: number;
+  state: WizardState;
+  highestStep: number;
+}
+
+function readDraft(): BookingDraft | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.sessionStorage.getItem(DRAFT_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (
+      typeof parsed === "object" &&
+      parsed != null &&
+      typeof parsed.step === "number" &&
+      parsed.state &&
+      typeof parsed.state === "object"
+    ) {
+      return parsed as BookingDraft;
+    }
+  } catch {
+    // Corrupt JSON / disabled storage — fall through to fresh state.
+  }
+  return null;
+}
+
+function writeDraft(draft: BookingDraft): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft));
+  } catch {
+    // Quota exceeded / Safari private mode / etc. — silently no-op.
+  }
+}
+
+function clearDraft(): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.removeItem(DRAFT_STORAGE_KEY);
+  } catch {
+    /* noop */
+  }
+}
+
 const TOTAL_STEPS = 5;
 // Trip + Passengers are merged into one step — the passenger group drives
 // the vehicle default, so making them separate steps doubled navigation
@@ -431,6 +483,54 @@ export default function TransportationBookingWizard() {
       as confirmation rather than another decision. Default 20% comes from
       `INITIAL_STATE.gratuity`; this state only controls visibility. */
   const [showGratuityPicker, setShowGratuityPicker] = useState(false);
+
+  /** Mobile-only: when true the sticky pricing bar opens an expandable panel
+      above it showing the full breakdown (Base / Mileage / Airport fee /
+      Gratuity / Add-ons). Lets phone users answer "why this price?" without
+      navigating away from the form. */
+  const [showStickyBreakdown, setShowStickyBreakdown] = useState(false);
+
+  /** Set to true once we've notified the user that we restored their draft —
+      shown as a small one-shot pill that fades after a few seconds. */
+  const [draftRestored, setDraftRestored] = useState(false);
+
+  /* ── Draft persistence ────────────────────────────────────
+   *
+   * Restore the booking state from sessionStorage on mount so an accidental
+   * refresh doesn't wipe everything. The URL `?service=…` deep-link still
+   * takes precedence if the customer explicitly picked a *different* service
+   * than the draft (intent to start a fresh flow). Saved on every state/step
+   * change, cleared after a successful submission.
+   */
+  useEffect(() => {
+    const draft = readDraft();
+    if (!draft) return;
+    if (
+      initialFromUrl.service &&
+      draft.state.service !== initialFromUrl.service
+    ) {
+      // URL is asking for a different service than what's in the draft —
+      // honour the URL and discard the stale draft.
+      clearDraft();
+      return;
+    }
+    setState(draft.state);
+    setStep(draft.step);
+    setHighestStep(Math.max(draft.highestStep ?? draft.step, draft.step));
+    setDraftRestored(true);
+    // Auto-hide the "draft restored" pill after a few seconds.
+    const t = window.setTimeout(() => setDraftRestored(false), 4500);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    // Skip persisting the brand-new INITIAL_STATE (no useful info captured
+    // yet). Once the customer has picked a service or moved past step 1,
+    // start writing every change.
+    if (step === 1 && state.service === null) return;
+    writeDraft({ step, state, highestStep });
+  }, [step, state, highestStep]);
 
   /** Cached actual driving distance from the last successful airport quote,
       scoped to the airport+hotel pair it was measured for. Reused by the
@@ -1254,6 +1354,10 @@ export default function TransportationBookingWizard() {
         if (!data.success && data.success !== "true") throw new Error("submission failed");
       }
       setSubmitStatus("success");
+      // Clean up the in-progress draft now that the booking is in the system —
+      // a stale draft from a completed booking would confuse the customer on
+      // a later visit.
+      clearDraft();
     } catch {
       setSubmitStatus("error");
     }
@@ -1275,7 +1379,15 @@ export default function TransportationBookingWizard() {
   /* ── Sub-renders ──────────────────────────────────────── */
 
   const ProgressBar = (
-    <nav aria-label="Booking progress" className="mb-8">
+    // Sticks to top of viewport on phone/tablet (sub-lg) so users can see
+    // their place in the flow while scrolling long steps. Negative side
+    // margins cancel the card's padding so the bg extends edge-to-edge while
+    // sticking; everything reverts to a static, padded layout at lg+ where
+    // the sidebar already orients the user.
+    <nav
+      aria-label="Booking progress"
+      className="sticky top-0 z-30 -mx-5 sm:-mx-8 px-5 sm:px-8 -mt-5 sm:-mt-8 pt-5 sm:pt-8 pb-3 mb-6 bg-white/95 backdrop-blur-md border-b border-border/40 lg:static lg:bg-transparent lg:backdrop-blur-none lg:border-0 lg:mx-0 lg:px-0 lg:mt-0 lg:pt-0 lg:pb-0 lg:mb-8"
+    >
       <ol className="flex items-center gap-1.5 sm:gap-2">
         {Array.from({ length: TOTAL_STEPS }).map((_, idx) => {
           const idx1 = idx + 1;
@@ -1526,16 +1638,57 @@ export default function TransportationBookingWizard() {
         </div>
       )}
 
-      {state.service !== "point-to-point" && (
-        <VehicleSelector
-          label="Vehicle"
-          description="Choose the vehicle that best fits your group size and luggage."
-          vehicles={vehiclesForPassengerCount(passengersFromGroup(state.passengerGroup))}
-          selectedId={state.vehicleId}
-          onSelect={(vehicleId) => handleField("vehicleId", vehicleId)}
-          hours={state.service === "hourly-charter" ? state.hours : undefined}
-        />
-      )}
+      {state.service !== "point-to-point" && (() => {
+        // Distance pill — surfaces the trip length right above the vehicle
+        // selector so customers can sanity-check vehicle vs. trip size.
+        // Pulls from the same priority order as the mobile sticky bar:
+        // live API → cached ref → null (hidden).
+        const pillDistance =
+          quote.kind === "ok" &&
+          quote.data.service === "airport-transfer" &&
+          quote.data.vehicle.id === state.vehicleId &&
+          typeof quote.data.distanceMiles === "number"
+            ? quote.data.distanceMiles
+            : lastAirportQuoteRef.current?.airport === state.airport &&
+              lastAirportQuoteRef.current?.otherAddressPlaceId === state.otherAddressPlaceId
+            ? lastAirportQuoteRef.current.distanceMiles
+            : null;
+        const pillHours = state.service === "hourly-charter" ? state.hours : null;
+        return (
+          <div>
+            {(pillDistance != null || pillHours != null) && (
+              <div className="flex flex-wrap items-center gap-2 mb-3">
+                {pillDistance != null && (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-gold/10 border border-gold/30 px-3 py-1 text-xs font-semibold text-ink">
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                    {pillDistance.toFixed(1)} mi
+                  </span>
+                )}
+                {pillHours != null && (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-gold/10 border border-gold/30 px-3 py-1 text-xs font-semibold text-ink">
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
+                      <circle cx="12" cy="12" r="9" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 7v5l3 2" />
+                    </svg>
+                    {pillHours} {pillHours === 1 ? "hour" : "hours"}
+                  </span>
+                )}
+              </div>
+            )}
+            <VehicleSelector
+              label="Vehicle"
+              description="Choose the vehicle that best fits your group size and luggage."
+              vehicles={vehiclesForPassengerCount(passengersFromGroup(state.passengerGroup))}
+              selectedId={state.vehicleId}
+              onSelect={(vehicleId) => handleField("vehicleId", vehicleId)}
+              hours={state.service === "hourly-charter" ? state.hours : undefined}
+            />
+          </div>
+        );
+      })()}
 
       <div className={fieldGroup}>
         <div>
@@ -2644,6 +2797,27 @@ export default function TransportationBookingWizard() {
           <div className="rounded-3xl border border-border bg-white shadow-sm p-5 sm:p-8">
           {ProgressBar}
 
+          {/* One-shot pill confirming we restored a saved draft. Auto-hides
+              ~4.5 s after mount via the timer in the restore effect. */}
+          <AnimatePresence>
+            {draftRestored && (
+              <motion.div
+                key="draft-restored"
+                initial={{ opacity: 0, y: -6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -6 }}
+                transition={{ duration: 0.25 }}
+                className="mb-4 inline-flex items-center gap-2 rounded-full border border-gold/30 bg-gold/10 px-3 py-1.5 text-xs font-semibold text-ink"
+                role="status"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.4} aria-hidden="true">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+                Picked up where you left off
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           <AnimatePresence>
             {error && (
               <motion.div
@@ -2789,11 +2963,97 @@ export default function TransportationBookingWizard() {
         const stickyContext = stickyContextParts.join(" · ");
 
         return (
-          <div className="lg:hidden fixed bottom-0 inset-x-0 z-40 border-t border-border bg-white/95 backdrop-blur-md px-4 pt-3 pb-[calc(env(safe-area-inset-bottom)+12px)] shadow-[0_-4px_20px_rgba(12,11,10,0.08)]">
-            <div className="flex items-center justify-between gap-3 max-w-2xl mx-auto">
-              <div className="min-w-0 flex-1">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted leading-none">
+          <div className="lg:hidden fixed bottom-0 inset-x-0 z-40 border-t border-border bg-white/95 backdrop-blur-md shadow-[0_-4px_20px_rgba(12,11,10,0.08)]">
+            {/* "Why this price?" expandable drawer — slides up above the bar
+                when the customer taps the price area. Shows whatever the
+                desktop summary shows (Base / Mileage / Airport fee per leg,
+                then Add-ons, Gratuity, Total). */}
+            {showStickyBreakdown && (
+              <div
+                id="sticky-breakdown-drawer"
+                className="max-w-2xl mx-auto px-4 pt-4 pb-3 border-b border-border/40 max-h-[60vh] overflow-y-auto"
+              >
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-gold mb-2">
+                  Why this price?
+                </p>
+                <dl className="space-y-2 text-sm text-ink">
+                  {priceSummary.breakdown && priceSummary.breakdown.length > 0 ? (
+                    priceSummary.breakdown.map((line, idx) => {
+                      if (line.amount === undefined) {
+                        return (
+                          <div
+                            key={`${idx}-${line.label}`}
+                            className="pt-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-ink/80"
+                          >
+                            {line.label}
+                          </div>
+                        );
+                      }
+                      return (
+                        <div
+                          key={`${idx}-${line.label}`}
+                          className={`flex justify-between gap-3${line.indent ? " pl-3" : ""}`}
+                        >
+                          <dt className="text-muted">{line.label}</dt>
+                          <dd className="font-medium tabular-nums">{formatCurrency(line.amount)}</dd>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="flex justify-between gap-3">
+                      <dt className="text-muted">Base</dt>
+                      <dd className="font-medium tabular-nums">{formatCurrency(priceSummary.basePrice)}</dd>
+                    </div>
+                  )}
+                  {priceSummary.addOns > 0 && (
+                    <div className="flex justify-between gap-3">
+                      <dt className="text-muted">Add-ons</dt>
+                      <dd className="font-medium tabular-nums">{formatCurrency(priceSummary.addOns)}</dd>
+                    </div>
+                  )}
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-muted">
+                      Gratuity {state.gratuity !== "cash" ? `(${state.gratuity}%)` : ""}
+                    </dt>
+                    <dd className="font-medium tabular-nums">
+                      {state.gratuity === "cash" ? "Cash at pickup" : formatCurrency(priceSummary.gratuity)}
+                    </dd>
+                  </div>
+                  <div className="flex justify-between gap-3 pt-2 mt-2 border-t border-border/60">
+                    <dt className="font-semibold text-ink">
+                      {priceSummary.priceLabel || "Total"}
+                    </dt>
+                    <dd className="font-display font-semibold text-ink tabular-nums">
+                      {priceSummary.total !== null ? formatCurrency(priceSummary.total) : "—"}
+                    </dd>
+                  </div>
+                </dl>
+              </div>
+            )}
+
+            <div className="flex items-center justify-between gap-3 max-w-2xl mx-auto px-4 pt-3 pb-[calc(env(safe-area-inset-bottom)+12px)]">
+              {/* Price section is a button — tap to open the breakdown drawer.
+                  Aria-expanded + aria-controls so screen readers announce
+                  the disclosure correctly. */}
+              <button
+                type="button"
+                onClick={() => setShowStickyBreakdown((v) => !v)}
+                aria-expanded={showStickyBreakdown}
+                aria-controls="sticky-breakdown-drawer"
+                className="group min-w-0 flex-1 text-left -my-1 -ml-1 py-1 pl-1 pr-2 rounded-lg active:bg-gold/5 transition-colors cursor-pointer"
+              >
+                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted leading-none flex items-center gap-1">
                   {priceSummary.priceLabel || "Estimated total"}
+                  <svg
+                    className={`w-3 h-3 text-muted transition-transform ${showStickyBreakdown ? "rotate-180" : ""}`}
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={2.4}
+                    aria-hidden="true"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                  </svg>
                 </p>
                 <p
                   className={`font-display text-xl font-semibold text-ink tabular-nums leading-tight transition-opacity duration-200 ${
@@ -2805,7 +3065,7 @@ export default function TransportationBookingWizard() {
                 <p className="mt-0.5 text-[11px] text-muted leading-snug truncate">
                   {stickyContext}
                 </p>
-              </div>
+              </button>
               <div className="flex gap-2 shrink-0">
                 {step > 1 && (
                   <button
@@ -2819,6 +3079,17 @@ export default function TransportationBookingWizard() {
                     </svg>
                   </button>
                 )}
+                {/* Inline phone CTA — escape hatch for customers who'd rather
+                    book by voice. Visible only on phone widths to save space. */}
+                <a
+                  href={SITE_CONTACT.phoneHref}
+                  className="sm:hidden inline-flex items-center justify-center px-4 py-3 rounded-full border border-border bg-white text-sm font-semibold text-ink min-h-[44px] active:scale-[0.96] transition-transform"
+                  aria-label={`Call ${SITE_CONTACT.phoneDisplay} to book by phone`}
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.13.96.37 1.9.72 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.91.35 1.85.59 2.81.72A2 2 0 0122 16.92z" />
+                  </svg>
+                </a>
                 <button
                   type="button"
                   onClick={handleNext}
