@@ -297,3 +297,101 @@ describe("INCLUDED_MILES constant", () => {
     expect(INCLUDED_MILES).toBe(14);
   });
 });
+
+/* ── Bug-fix regression tests (round-trip leak, distance stability, rounding) ── */
+
+describe("regression: P2P (computeQuote) one-way vs round-trip", () => {
+  it("Sedan 20.4 mi one-way → $104  (no implicit doubling)", () => {
+    // 85 + (20.4 - 14) * 3.0 = 85 + 19.2 = 104.20 → $104
+    const q = computeQuote({ vehicle: sedan(), distanceMiles: 20.4, tripType: "oneway" });
+    expect(q.base).toBe(104);
+  });
+  it("Sedan 20.4 mi round-trip = exactly 2 × one-way", () => {
+    // exact one-way: 104.20; round-trip: 208.40 → $208
+    const q = computeQuote({ vehicle: sedan(), distanceMiles: 20.4, tripType: "roundtrip" });
+    expect(q.base).toBe(208);
+    expect(q.oneWayFareExact).toBeCloseTo(104.2, 2);
+  });
+});
+
+describe("regression: 14-mile threshold boundary (no mileage charge at or below 14)", () => {
+  it.each([
+    ["sedan", sedan, 85],
+    ["suv", suv, 95],
+    ["van", van, 120],
+    ["sprinter", sprinter, 185],
+  ] as const)("%s 14 mi (boundary) → base only ($%i)", (_label, v, expected) => {
+    const q = computeQuote({ vehicle: v(), distanceMiles: 14, tripType: "oneway" });
+    expect(q.base).toBe(expected);
+  });
+  it.each([
+    ["sedan", sedan, 85],
+    ["suv", suv, 95],
+    ["van", van, 120],
+    ["sprinter", sprinter, 185],
+  ] as const)("%s 13.99 mi (just under) → base only ($%i)", (_label, v, expected) => {
+    const q = computeQuote({ vehicle: v(), distanceMiles: 13.99, tripType: "oneway" });
+    expect(q.base).toBe(expected);
+  });
+  it("Sedan 14.1 mi → mileage line kicks in", () => {
+    // 85 + 0.1 * 3.0 = $85.30 → $85
+    const q = computeQuote({ vehicle: sedan(), distanceMiles: 14.1, tripType: "oneway" });
+    expect(q.base).toBe(85);
+    expect(q.breakdown.some((r) => r.label.startsWith("Mileage"))).toBe(true);
+  });
+});
+
+describe("regression: mileage rounding is deterministic for the displayed distance", () => {
+  // Bug 3: 20.4 × $3.50 = 71.40 was displaying as $72 because the underlying
+  // distance had higher precision than the "20.4" we showed. The wizard now
+  // rounds the cached distance to 1 decimal at the source, so the engine
+  // math run against THAT same rounded value must agree with what a customer
+  // sees on the breakdown line.
+  it.each([
+    ["sedan",    sedan,    20.4, 104, "20.4 × 3.0 = 19.2; base 85 + 19.2 = 104.2 → 104"],
+    ["suv",      suv,      20.4, 117, "20.4 - 14 = 6.4; 6.4 × 3.5 = 22.4; base 95 + 22.4 = 117.4 → 117"],
+    ["van",      van,      20.4, 146, "6.4 × 4.0 = 25.6; base 120 + 25.6 = 145.6 → 146"],
+    ["sprinter", sprinter, 20.4, 217, "6.4 × 5.0 = 32; base 185 + 32 = 217"],
+  ] as const)("%s @ 20.4 mi P2P one-way → $%i (%s)", (_label, v, miles, expected) => {
+    const q = computeQuote({ vehicle: v(), distanceMiles: miles, tripType: "oneway" });
+    expect(q.base).toBe(expected);
+  });
+
+  it("airport SUV @ 20.4 mi (Bug 3 specific) — line matches total", () => {
+    // 85 (airport SUV base) + 6.4 × 4.00 (airport perMile) + 5 fee = 115.6 → $116
+    const q = computeAirportQuote({ vehicle: suv(), miles: 20.4, tripType: "oneway" });
+    expect(q.base).toBe(116);
+  });
+});
+
+describe("regression: hourly is unaffected by round-trip flag", () => {
+  // Bug 1 corollary — service-switching should reset roundTrip on the
+  // wizard side, but the engine's hourly path doesn't read tripType at all.
+  // Lock that behavior in.
+  it("Sedan 4 hr → 4 × $75 = $300 (no doubling)", () => {
+    const q = computeHourlyQuote({ vehicle: sedan(), hours: 4 });
+    expect(q.base).toBe(300);
+  });
+});
+
+describe("regression: round-trip applies the multiplier consistently per service", () => {
+  it("P2P sedan 35 mi: round-trip is 2 × the EXACT one-way (not the rounded display)", () => {
+    // exact one-way: 85 + 21 × 3.0 = 148  (already integer)
+    const ow = computeQuote({ vehicle: sedan(), distanceMiles: 35, tripType: "oneway" });
+    const rt = computeQuote({ vehicle: sedan(), distanceMiles: 35, tripType: "roundtrip" });
+    expect(ow.base).toBe(148);
+    expect(rt.base).toBe(296); // = 148 × 2 exactly
+    expect(rt.oneWayFareExact).toBeCloseTo(ow.oneWayFareExact, 2);
+  });
+  it("Airport sedan 35 mi: round-trip is 2 × the EXACT one-way (allow ±1 from display rounding)", () => {
+    // exact one-way leg: 75 + 21 × 3.5 + 5 = 153.5; rounded display = $154.
+    // round-trip is 153.5 × 2 = 307, which is the rounded display value $308 − 1
+    // because the engine rounds AFTER multiplying. Locked-in expected values.
+    const ow = computeAirportQuote({ vehicle: sedan(), miles: 35, tripType: "oneway" });
+    const rt = computeAirportQuote({ vehicle: sedan(), miles: 35, tripType: "roundtrip" });
+    expect(ow.base).toBe(154);
+    expect(rt.base).toBe(307);
+    // Display rounding may differ by up to 1, but never doubles the displayed value.
+    expect(Math.abs(rt.base - ow.base * 2)).toBeLessThanOrEqual(1);
+  });
+});

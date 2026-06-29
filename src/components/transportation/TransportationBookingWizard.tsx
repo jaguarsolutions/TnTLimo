@@ -26,7 +26,6 @@ import { FORM_SUBJECT_PREFIX } from "@/lib/siteEnv";
 import {
   AIRPORT_SERVICE_FEE,
   INCLUDED_MILES,
-  ROUND_TRIP_MULTIPLIER,
   SERVICE_RADIUS_MILES,
   VEHICLES,
   getVehicle,
@@ -561,11 +560,23 @@ export default function TransportationBookingWizard() {
       typeof quote.data.distanceMiles === "number" &&
       Number.isFinite(quote.data.distanceMiles)
     ) {
-      lastAirportQuoteRef.current = {
-        airport: state.airport,
-        otherAddressPlaceId: state.otherAddressPlaceId,
-        distanceMiles: quote.data.distanceMiles,
-      };
+      const cached = lastAirportQuoteRef.current;
+      const samePair =
+        cached?.airport === state.airport &&
+        cached?.otherAddressPlaceId === state.otherAddressPlaceId;
+      // Only write the cache the FIRST time we see this address pair. Google
+      // Routes can return slightly different distances across calls for the
+      // exact same pair (Bug 2) — locking on first read keeps the displayed
+      // distance + the breakdown math both stable across vehicle switches.
+      // We also round at the source (Bug 3) so distance.toFixed(1) for the
+      // display and (distance × perMile) for the math agree to the cent.
+      if (!samePair) {
+        lastAirportQuoteRef.current = {
+          airport: state.airport,
+          otherAddressPlaceId: state.otherAddressPlaceId,
+          distanceMiles: Math.round(quote.data.distanceMiles * 10) / 10,
+        };
+      }
     }
     if (
       quote.kind === "ok" &&
@@ -573,11 +584,17 @@ export default function TransportationBookingWizard() {
       typeof quote.data.distanceMiles === "number" &&
       Number.isFinite(quote.data.distanceMiles)
     ) {
-      lastP2PQuoteRef.current = {
-        pickupPlaceId: state.pickupPlaceId,
-        dropoffPlaceId: state.dropoffPlaceId,
-        distanceMiles: quote.data.distanceMiles,
-      };
+      const cached = lastP2PQuoteRef.current;
+      const samePair =
+        cached?.pickupPlaceId === state.pickupPlaceId &&
+        cached?.dropoffPlaceId === state.dropoffPlaceId;
+      if (!samePair) {
+        lastP2PQuoteRef.current = {
+          pickupPlaceId: state.pickupPlaceId,
+          dropoffPlaceId: state.dropoffPlaceId,
+          distanceMiles: Math.round(quote.data.distanceMiles * 10) / 10,
+        };
+      }
     }
   }, [quote, state.airport, state.otherAddressPlaceId, state.pickupPlaceId, state.dropoffPlaceId]);
 
@@ -741,55 +758,39 @@ export default function TransportationBookingWizard() {
       // baseline distance that doesn't reflect the user's real hotel.
       const noDestinationYet = !state.otherAddressPlaceId;
 
-      // Resolve the distance we'll show the breakdown for — preferring the
-      // API's actual distance over the cached one over the airport's baseline.
+      // Resolve the distance we'll show the breakdown for. Priority:
+      //   1. Cached actual distance for the current (airport, address) pair —
+      //      first-write-wins (Bug 2 + Bug 3) so the displayed number and the
+      //      breakdown math don't drift across vehicle switches.
+      //   2. Fresh API distance if we have no cache yet (first quote).
+      //   3. Airport baseline distance as a last-resort estimate.
+      const cachedAirportDistance =
+        lastAirportQuoteRef.current?.airport === state.airport &&
+        lastAirportQuoteRef.current?.otherAddressPlaceId === state.otherAddressPlaceId
+          ? lastAirportQuoteRef.current.distanceMiles
+          : null;
       const distanceMiles = noDestinationYet
         ? INCLUDED_MILES
-        : apiQuoteMatchesSelection && quote.kind === "ok" && typeof quote.data.distanceMiles === "number"
-          ? quote.data.distanceMiles
-          : lastAirportQuoteRef.current?.airport === state.airport &&
-              lastAirportQuoteRef.current?.otherAddressPlaceId === state.otherAddressPlaceId
-            ? lastAirportQuoteRef.current.distanceMiles
+        : cachedAirportDistance != null
+          ? cachedAirportDistance
+          : apiQuoteMatchesSelection && quote.kind === "ok" && typeof quote.data.distanceMiles === "number"
+            ? quote.data.distanceMiles
             : AIRPORT_PRICING[state.airport as keyof typeof AIRPORT_PRICING]?.distanceMiles ?? null;
 
       const breakdown = buildAirportBreakdown(state.vehicleId, distanceMiles, state.roundTrip);
 
-      if (apiQuoteMatchesSelection && quote.kind === "ok") {
-        const fromLabel = state.airportDirection === "from-airport" ? state.airport : state.otherAddress || "Hotel/address";
-        const toLabel = state.airportDirection === "from-airport" ? state.otherAddress || "Hotel/address" : state.airport;
-        const basePrice = quote.data.base;
-        const gratuityAmount =
-          state.gratuity === "cash" ? 0 : Math.round((basePrice * Number(state.gratuity)) / 100);
-        return {
-          basePrice,
-          addOns: state.meetAndGreet ? 30 : 0,
-          gratuity: gratuityAmount,
-          total: basePrice + gratuityAmount,
-          pending: false,
-          routeLabel: `Starts at ${fromLabel} ${state.roundTrip ? "↔" : "→"} ${toLabel}${state.roundTrip ? " (round trip)" : ""}`,
-          priceLabel: "Total",
-          breakdown,
-        };
-      }
-
-      // Fallback path — use the cached actual distance from the last
-      // successful quote so the local preview already matches what the
-      // API is about to return. Without this we'd use the airport's
-      // baseline distance, which doesn't reflect the user's hotel. When
-      // there's no destination yet, pass INCLUDED_MILES so the price is
-      // just `base + airport fee` with no mileage, matching the breakdown.
-      const fallbackDistance = noDestinationYet
-        ? INCLUDED_MILES
-        : lastAirportQuoteRef.current?.airport === state.airport &&
-            lastAirportQuoteRef.current?.otherAddressPlaceId === state.otherAddressPlaceId
-          ? lastAirportQuoteRef.current.distanceMiles
-          : undefined;
+      // Compute price LOCALLY from the resolved distance so the breakdown
+      // lines, the displayed mileage, and the final total are guaranteed to
+      // agree to the cent (Bug 2 + Bug 3). The API quote is still polled so
+      // we get the first measured distance, but its `quote.data.base` is no
+      // longer used directly — we recompute from the cached/displayed value
+      // to keep things consistent across vehicle switches.
       const pricing = calculateAirportTransferPrice(
         state.airport,
         state.vehicleId,
         state.meetAndGreet,
         state.roundTrip,
-        fallbackDistance,
+        distanceMiles ?? undefined,
       );
       if (!pricing) {
         return {
@@ -808,14 +809,17 @@ export default function TransportationBookingWizard() {
         state.gratuity === "cash" ? 0 : Math.round((subtotal * Number(state.gratuity)) / 100);
       const fromLabel = state.airportDirection === "from-airport" ? state.airport : state.otherAddress || "Hotel/address";
       const toLabel = state.airportDirection === "from-airport" ? state.otherAddress || "Hotel/address" : state.airport;
+      // Confirmed once we've received any successful API quote for this pair
+      // (even if it was for a different vehicle — the distance is locked).
+      const confirmed = apiQuoteMatchesSelection || cachedAirportDistance != null;
       return {
         basePrice: pricing.total,
         addOns: pricing.addOns,
         gratuity: gratuityAmount,
         total: subtotal + gratuityAmount,
-        pending: quote.kind === "loading",
-        routeLabel: `Starts at ${fromLabel} → ${toLabel}${state.roundTrip ? " (round trip)" : ""}`,
-        priceLabel: "Starts at",
+        pending: !confirmed && quote.kind === "loading",
+        routeLabel: `Starts at ${fromLabel} ${state.roundTrip ? "↔" : "→"} ${toLabel}${state.roundTrip ? " (round trip)" : ""}`,
+        priceLabel: confirmed ? "Total" : "Starts at",
         breakdown,
       };
     }
@@ -831,77 +835,61 @@ export default function TransportationBookingWizard() {
 
       const hasPlaceIds = !!state.pickupPlaceId && !!state.dropoffPlaceId;
 
-      // Resolve the distance for the breakdown + local computation:
-      //   1. API actual distance (when the quote matches the current vehicle)
-      //   2. Cached actual distance from a prior quote for this same pair
+      // Resolve the distance for the breakdown + local computation. Priority:
+      //   1. Cached actual distance for the current (pickup, dropoff) pair —
+      //      first-write-wins (Bug 2 + Bug 3) so subsequent quotes can't
+      //      drift the displayed distance or per-line math.
+      //   2. Fresh API distance if we have no cache yet (first quote).
       //   3. INCLUDED_MILES sentinel when no addresses are picked yet — that
       //      makes the breakdown collapse to just the Base row, mirroring the
       //      airport flow's "no destination yet" preview.
-      const distanceMiles: number | null =
-        apiQuoteMatchesSelection && quote.kind === "ok" && typeof quote.data.distanceMiles === "number"
-          ? quote.data.distanceMiles
-          : hasPlaceIds
-            ? lastP2PQuoteRef.current?.pickupPlaceId === state.pickupPlaceId &&
-              lastP2PQuoteRef.current?.dropoffPlaceId === state.dropoffPlaceId
-              ? lastP2PQuoteRef.current.distanceMiles
-              : null
-            : INCLUDED_MILES;
+      const cachedP2PDistance =
+        lastP2PQuoteRef.current?.pickupPlaceId === state.pickupPlaceId &&
+        lastP2PQuoteRef.current?.dropoffPlaceId === state.dropoffPlaceId
+          ? lastP2PQuoteRef.current.distanceMiles
+          : null;
+      const distanceMiles: number | null = !hasPlaceIds
+        ? INCLUDED_MILES
+        : cachedP2PDistance != null
+          ? cachedP2PDistance
+          : apiQuoteMatchesSelection && quote.kind === "ok" && typeof quote.data.distanceMiles === "number"
+            ? quote.data.distanceMiles
+            : null;
 
-      const breakdown = buildPointToPointBreakdown(state.vehicleId, distanceMiles, state.roundTrip);
+      // Defensive: P2P has no round-trip UI toggle, so we never apply the
+      // round-trip multiplier here even if `state.roundTrip` happens to be
+      // true from a prior airport-transfer selection. The service-switch
+      // handler also resets `roundTrip` (Bug 1) — this is the second layer.
+      const breakdown = buildPointToPointBreakdown(state.vehicleId, distanceMiles, false);
 
-      // PRIMARY PATH — live quote from /api/quote for the current vehicle.
-      if (apiQuoteMatchesSelection && quote.kind === "ok") {
-        const matched = quote.data.matchedFixedRoute;
-        const distance = quote.data.distanceMiles;
-        const label = matched
-          ? `Fixed route: ${matched.replace(/-/g, " → ")}`
-          : distance != null
-            ? `Custom route · ${distance.toFixed(1)} mi (${quote.data.vehicle.name})`
-            : `Custom route (${quote.data.vehicle.name})`;
-        const basePrice = quote.data.base;
-        const gratuityAmount =
-          state.gratuity === "cash" ? 0 : Math.round((basePrice * Number(state.gratuity)) / 100);
-        // Fixed-route quotes don't decompose into base + mileage — skip the
-        // breakdown for those and let the renderer fall back to the single
-        // "Trip fare" row.
-        const finalBreakdown = matched ? undefined : breakdown;
-        return {
-          basePrice,
-          addOns: state.extraStop ? 20 : 0,
-          gratuity: gratuityAmount,
-          total: basePrice + gratuityAmount,
-          pending: false,
-          routeLabel: label,
-          priceLabel: matched ? "Total" : "Starts at",
-          breakdown: finalBreakdown,
-        };
-      }
-
-      // SECONDARY — compute locally from the cached/known distance + current
-      // vehicle's rates. Covers vehicle switches (stale API quote), loading
-      // a fresh quote with a remembered distance, and the no-addresses-yet
-      // preview. Result lines up with what the API will return next.
+      // Compute price locally from the resolved distance. Since the
+      // fixed-route overrides were removed, the engine math matches what the
+      // API returns, so we use one code path that's guaranteed to agree with
+      // the displayed mileage and breakdown (Bug 2 + Bug 3).
       if (distanceMiles !== null) {
         const vehicle = getVehicle(state.vehicleId);
         if (vehicle) {
           const extraMiles = Math.max(0, distanceMiles - INCLUDED_MILES);
           const oneWay = vehicle.baseFare + vehicle.perMile * extraMiles;
-          const trip = state.roundTrip ? oneWay * ROUND_TRIP_MULTIPLIER : oneWay;
-          const basePrice = Math.round(trip);
+          // P2P is always one-way (Bug 1) — see breakdown comment above.
+          const basePrice = Math.round(oneWay);
           const addOns = state.extraStop ? 20 : 0;
           const subtotal = basePrice + addOns;
           const gratuityAmount =
             state.gratuity === "cash" ? 0 : Math.round((subtotal * Number(state.gratuity)) / 100);
+          // Confirmed once we have a measured distance for the pair — either
+          // a fresh API hit for the current vehicle or a cached one.
+          const confirmed = apiQuoteMatchesSelection || cachedP2PDistance != null;
           return {
             basePrice,
             addOns,
             gratuity: gratuityAmount,
             total: subtotal + gratuityAmount,
-            pending: hasPlaceIds && quote.kind === "loading",
+            pending: hasPlaceIds && quote.kind === "loading" && !confirmed,
             routeLabel: hasPlaceIds
-              ? `Custom route (${vehicle.name})`
+              ? `Custom route · ${distanceMiles.toFixed(1)} mi (${vehicle.name})`
               : "Pick pickup and drop-off above for a quote.",
-            priceLabel: "Starts at",
+            priceLabel: confirmed ? "Total" : "Starts at",
             breakdown,
           };
         }
@@ -1529,7 +1517,27 @@ export default function TransportationBookingWizard() {
             aria-checked={isSelected}
             ref={idx === 0 ? (el) => { firstFieldRef.current = el; } : undefined}
             onClick={() => {
-              setState((current) => ({ ...current, service: service.code }));
+              setState((current) => {
+                // Switching service should reset any flags that only apply to
+                // the previous service — otherwise (e.g.) an airport Round
+                // Trip choice leaks into Point-to-Point and doubles the
+                // total without the user being able to undo it (P2P has no
+                // round-trip toggle in its UI). Bug 1 fix.
+                const switchingAwayFromAirport =
+                  current.service === "airport-transfer" && service.code !== "airport-transfer";
+                const switchingAwayFromP2P =
+                  current.service === "point-to-point" && service.code !== "point-to-point";
+                return {
+                  ...current,
+                  service: service.code,
+                  ...(switchingAwayFromAirport
+                    ? { roundTrip: false, meetAndGreet: false }
+                    : {}),
+                  ...(switchingAwayFromP2P
+                    ? { extraStop: false, extraStopDetails: "" }
+                    : {}),
+                };
+              });
               setError("");
               // Auto-advance gives a faster feel; small delay so the user sees their selection.
               window.setTimeout(() => goToStep(2), 250);
