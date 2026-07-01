@@ -16,7 +16,7 @@ export function getStripe(): Stripe {
   const key = process.env.STRIPE_SECRET_KEY;
   if (!key) {
     throw new Error(
-      "STRIPE_SECRET_KEY is not set. Add it in Vercel env (use sk_test_… for testing)."
+      "STRIPE_SECRET_KEY is not set. Add it in Netlify env (use sk_test_… for testing)."
     );
   }
   cached = new Stripe(key, { typescript: true });

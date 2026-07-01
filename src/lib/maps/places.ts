@@ -29,7 +29,7 @@ function getServerKey(): string {
   const key = process.env.GOOGLE_MAPS_SERVER_KEY;
   if (!key) {
     throw new Error(
-      "GOOGLE_MAPS_SERVER_KEY is not set. Configure it in Vercel env (and .env.local for dev)."
+      "GOOGLE_MAPS_SERVER_KEY is not set. Configure it in Netlify env (and .env.local for dev)."
     );
   }
   return key;

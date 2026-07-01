@@ -12,7 +12,7 @@ function getResend(): Resend {
   if (cached) return cached;
   const key = process.env.RESEND_API_KEY;
   if (!key) {
-    throw new Error("RESEND_API_KEY is not set. Add it in Vercel env.");
+    throw new Error("RESEND_API_KEY is not set. Add it in Netlify env.");
   }
   // Light fingerprint so we can confirm in logs that the key was loaded —
   // never log the full secret.

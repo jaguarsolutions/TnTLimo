@@ -56,7 +56,7 @@ function isBookableService(value: unknown): value is BookableServiceCode {
 
 export async function POST(request: Request) {
   // Short id we surface to the client so a user-reported failure can be
-  // correlated with the matching line in Vercel's function logs.
+  // correlated with the matching line in Netlify's function logs.
   const diagnosticId = Math.random().toString(36).slice(2, 8);
 
   try {

@@ -57,7 +57,7 @@ function getServerKey(): string {
  * Keyed by an order-independent hash of the two place IDs so A→B and B→A
  * share a cache entry. TTL is 24h — driving distances change rarely.
  *
- * Per-process Map. In a serverless / Vercel deployment each lambda instance
+ * Per-process Map. In a serverless / Netlify deployment each function instance
  * has its own cache; cold starts pay for the call. For our volume that's
  * fine. If it becomes a problem we can hoist to Redis later.
  */

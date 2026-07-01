@@ -5,7 +5,7 @@ import * as schema from "./schema";
 /**
  * Neon serverless Postgres client wired through Drizzle.
  *
- * `DATABASE_URL` is provisioned by the Neon ↔ Vercel integration.
+ * `DATABASE_URL` is provisioned by the Neon ↔ Netlify integration.
  * For local dev, pull it from the Neon dashboard into `.env.local`.
  *
  * The connection is lazy: we only call `neon()` on first DB query, which
@@ -20,7 +20,7 @@ let cached: DrizzleNeonDb | null = null;
 function init(): DrizzleNeonDb {
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) {
-    throw new Error("DATABASE_URL is not set. Add it in Vercel env (or .env.local for dev).");
+    throw new Error("DATABASE_URL is not set. Add it in Netlify env (or .env.local for dev).");
   }
   const sql = neon(databaseUrl);
   return drizzle(sql, { schema });

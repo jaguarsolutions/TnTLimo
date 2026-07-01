@@ -2,7 +2,7 @@ import { defineConfig } from "drizzle-kit";
 import { loadEnvFile } from "node:process";
 
 // Drizzle CLI doesn't auto-load .env files (Next.js does, but the CLI doesn't).
-// Pull DATABASE_URL out of .env.local for local dev. In CI / Vercel the env
+// Pull DATABASE_URL out of .env.local for local dev. In CI / Netlify the env
 // vars are already populated by the platform, so the failed load is harmless.
 try {
   loadEnvFile(".env.local");

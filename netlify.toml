@@ -1,0 +1,14 @@
+# Netlify configuration for the TNT Tours Next.js app.
+# The official Next.js runtime handles the App Router, API routes (Stripe,
+# bookings, refunds) and Server Components as serverless / edge functions —
+# no static export. Environment variables (DATABASE_URL, STRIPE_SECRET_KEY,
+# RESEND_API_KEY, GOOGLE_MAPS_SERVER_KEY, NEXT_PUBLIC_* keys, etc.) are set in
+# Netlify: Site configuration → Environment variables.
+
+[build]
+  command = "next build"
+  # The Next.js runtime plugin manages the publish directory automatically.
+  publish = ".next"
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"

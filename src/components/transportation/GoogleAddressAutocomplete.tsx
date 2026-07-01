@@ -54,7 +54,7 @@ function loadPlacesLibrary(): Promise<google.maps.PlacesLibrary> {
   if (!apiKey) {
     return Promise.reject(
       new Error(
-        "NEXT_PUBLIC_GOOGLE_MAPS_BROWSER_KEY is not set. Add it to your .env.local and Vercel env."
+        "NEXT_PUBLIC_GOOGLE_MAPS_BROWSER_KEY is not set. Add it to your .env.local and Netlify env."
       )
     );
   }
