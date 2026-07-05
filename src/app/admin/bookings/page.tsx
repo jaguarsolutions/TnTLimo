@@ -7,9 +7,8 @@ import { signManageToken } from "@/lib/booking/manageToken";
 import { getTenant } from "@/lib/tenant";
 import { ADMIN_SESSION_COOKIE, isAdminSessionValue } from "@/lib/admin/auth";
 import { redirect } from "next/navigation";
-import AdminConfirmButton from "@/components/booking/AdminConfirmButton";
-import AdminResendEmailButton from "@/components/booking/AdminResendEmailButton";
-import AdminCancelButton from "@/components/booking/AdminCancelButton";
+import { describeBooking } from "@/lib/booking/describeBooking";
+import AdminBookingRow from "@/components/booking/AdminBookingRow";
 
 export const dynamic = "force-dynamic";
 
@@ -21,14 +20,6 @@ const STATUS_FILTERS: Array<{ value: "all" | BookingStatus; label: string }> = [
   { value: "payment_failed", label: "Payment failed" },
   { value: "refund_failed", label: "Refund pending" },
 ];
-
-const STATUS_BADGES: Record<BookingStatus, { label: string; bg: string; text: string }> = {
-  pending: { label: "Pending", bg: "bg-amber-100", text: "text-amber-800" },
-  confirmed: { label: "Confirmed", bg: "bg-green-100", text: "text-green-800" },
-  cancelled: { label: "Cancelled", bg: "bg-stone-200", text: "text-stone-700" },
-  refund_failed: { label: "Refund pending", bg: "bg-orange-100", text: "text-orange-800" },
-  payment_failed: { label: "Payment failed", bg: "bg-red-100", text: "text-red-800" },
-};
 
 interface PageProps {
   searchParams: Promise<{ status?: string }>;
@@ -145,102 +136,30 @@ export default async function AdminBookingsPage({ searchParams }: PageProps) {
                 </tr>
               ) : (
                 rows.map((b) => {
-                  const badge = STATUS_BADGES[b.status];
                   const manageHref = `/booking/${b.confirmationCode}?t=${encodeURIComponent(signManageToken(b.id))}`;
                   return (
-                    <tr key={b.id} className="border-t border-stone-200 hover:bg-stone-50">
-                      <td className="px-4 py-3 font-mono text-xs text-stone-800">{b.confirmationCode}</td>
-                      <td className="px-4 py-3">
-                        <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${badge.bg} ${badge.text}`}>
-                          {badge.label}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-stone-700">{b.serviceLabel}</td>
-                      <td className="px-4 py-3">
-                        <div className="text-stone-900">
-                          {b.customerFirstName} {b.customerLastName}
-                        </div>
-                        <div className="text-xs text-stone-500">{b.customerEmail}</div>
-                        <div className="text-xs text-stone-500">{b.customerPhone}</div>
-                      </td>
-                      <td className="px-4 py-3 text-stone-700 whitespace-nowrap">
-                        {new Intl.DateTimeFormat("en-US", {
-                          month: "short",
-                          day: "numeric",
-                          hour: "numeric",
-                          minute: "2-digit",
-                          timeZone: tenant.timezone,
-                        }).format(new Date(b.pickupAt))}{" "}
-                        <span className="text-xs text-stone-400">PT</span>
-                      </td>
-                      <td className="px-4 py-3 text-right tabular-nums text-stone-900 font-medium">
-                        ${(b.totalCents / 100).toFixed(2)}
-                      </td>
-                      <td className="px-4 py-3 text-xs text-stone-500 whitespace-nowrap">
-                        {new Intl.DateTimeFormat("en-US", {
-                          month: "short",
-                          day: "numeric",
-                          hour: "numeric",
-                          minute: "2-digit",
-                        }).format(new Date(b.createdAt))}
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <div className="flex flex-col items-end gap-1.5">
-                          {/* Email status — surfaces silent Resend failures */}
-                          {b.status === "confirmed" && (
-                            b.confirmationEmailSentAt ? (
-                              <span
-                                className="text-[10px] text-stone-500"
-                                title={`Sent ${new Intl.DateTimeFormat("en-US", {
-                                  month: "short",
-                                  day: "numeric",
-                                  hour: "numeric",
-                                  minute: "2-digit",
-                                }).format(new Date(b.confirmationEmailSentAt))}`}
-                              >
-                                ✉ sent
-                              </span>
-                            ) : (
-                              <span
-                                className="text-[10px] text-orange-700 font-semibold"
-                                title={b.confirmationEmailLastError ?? "Email not yet sent"}
-                              >
-                                ⚠ email failed
-                                {b.confirmationEmailAttempts > 0 && (
-                                  <> · {b.confirmationEmailAttempts}×</>
-                                )}
-                              </span>
-                            )
-                          )}
-                          <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1">
-                            {b.status === "pending" && (
-                              <AdminConfirmButton bookingId={b.id} />
-                            )}
-                            {b.status === "confirmed" && !b.confirmationEmailSentAt && (
-                              <AdminResendEmailButton bookingId={b.id} variant="retry" />
-                            )}
-                            {b.status === "confirmed" && b.confirmationEmailSentAt && (
-                              <AdminResendEmailButton bookingId={b.id} variant="resend" />
-                            )}
-                            {(b.status === "confirmed" || b.status === "pending") && (
-                              <AdminCancelButton
-                                bookingId={b.id}
-                                confirmationCode={b.confirmationCode}
-                                total={`$${(b.totalCents / 100).toFixed(2)}`}
-                              />
-                            )}
-                            <Link
-                              href={manageHref}
-                              className="text-amber-700 hover:text-amber-900 underline text-xs"
-                              target="_blank"
-                              rel="noreferrer"
-                            >
-                              Open ↗
-                            </Link>
-                          </div>
-                        </div>
-                      </td>
-                    </tr>
+                    <AdminBookingRow
+                      key={b.id}
+                      timezone={tenant.timezone}
+                      manageHref={manageHref}
+                      detailRows={describeBooking(b)}
+                      booking={{
+                        id: b.id,
+                        confirmationCode: b.confirmationCode,
+                        status: b.status,
+                        serviceLabel: b.serviceLabel,
+                        customerFirstName: b.customerFirstName,
+                        customerLastName: b.customerLastName,
+                        customerEmail: b.customerEmail,
+                        customerPhone: b.customerPhone,
+                        pickupAt: b.pickupAt.toISOString(),
+                        createdAt: b.createdAt.toISOString(),
+                        totalCents: b.totalCents,
+                        confirmationEmailSentAt: b.confirmationEmailSentAt?.toISOString() ?? null,
+                        confirmationEmailAttempts: b.confirmationEmailAttempts,
+                        confirmationEmailLastError: b.confirmationEmailLastError,
+                      }}
+                    />
                   );
                 })
               )}
