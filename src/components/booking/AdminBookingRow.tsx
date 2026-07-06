@@ -79,20 +79,42 @@ export default function AdminBookingRow({
   return (
     <>
       <tr
-        className="border-t border-stone-200 hover:bg-stone-50 cursor-pointer"
+        className={`border-t border-stone-200 cursor-pointer transition-colors ${
+          open ? "bg-amber-50" : "hover:bg-stone-50"
+        }`}
         onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
       >
         <td className="px-4 py-3 font-mono text-xs text-stone-800">
-          <span className="inline-flex items-center gap-1.5">
-            <span
-              className={`inline-block text-stone-400 transition-transform ${open ? "rotate-90" : ""}`}
-              aria-hidden="true"
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setOpen((v) => !v);
+              }}
+              aria-expanded={open}
+              aria-label={open ? "Hide reservation details" : "Show reservation details"}
+              className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 ${
+                open
+                  ? "border-amber-500 bg-amber-500 text-white"
+                  : "border-stone-300 text-stone-500 hover:border-amber-400 hover:bg-amber-50 hover:text-amber-700"
+              }`}
             >
-              ▸
-            </span>
-            {b.confirmationCode}
-          </span>
+              <svg
+                className={`h-3.5 w-3.5 transition-transform ${open ? "rotate-90" : ""}`}
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={2.5}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M9 6l6 6-6 6" />
+              </svg>
+            </button>
+            <span>{b.confirmationCode}</span>
+          </div>
         </td>
         <td className="px-4 py-3">
           <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${badge.bg} ${badge.text}`}>
@@ -160,23 +182,37 @@ export default function AdminBookingRow({
       </tr>
 
       {open && (
-        <tr className="border-t border-stone-100 bg-stone-50/60">
-          <td colSpan={8} className="px-4 py-4">
-            <div className="rounded-xl border border-stone-200 bg-white p-4">
-              <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-stone-500">
-                Reservation details
-              </p>
-              <dl className="grid gap-x-8 gap-y-2 sm:grid-cols-2">
-                {detailRows.map((row) => (
-                  <div
-                    key={row.label}
-                    className="flex justify-between gap-4 border-b border-stone-100 pb-1.5"
-                  >
-                    <dt className="text-sm text-stone-500">{row.label}</dt>
-                    <dd className="text-sm font-medium text-stone-900 text-right">{row.value}</dd>
-                  </div>
-                ))}
-              </dl>
+        <tr className="border-t border-stone-100 bg-amber-50/40">
+          <td colSpan={8} className="p-0">
+            {/*
+              The detail panel lives in a colSpan cell inside a horizontally
+              scrollable, 8-column-wide table. Left unconstrained, its content
+              spreads the full table width — forcing mobile users to scroll
+              sideways to read it. Pinning it `sticky left-0` and sizing it to
+              the visible content width (viewport minus the layout's px-8 gutter,
+              capped at the max-w-6xl content box) keeps the whole panel on
+              screen no matter how far the row is scrolled.
+            */}
+            <div
+              className="sticky left-0 p-4"
+              style={{ width: "min(calc(100vw - 4rem), 68rem)" }}
+            >
+              <div className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm">
+                <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-stone-500">
+                  Reservation details
+                </p>
+                <dl className="grid gap-x-8 gap-y-2 sm:grid-cols-2">
+                  {detailRows.map((row) => (
+                    <div
+                      key={row.label}
+                      className="flex justify-between gap-4 border-b border-stone-100 pb-1.5"
+                    >
+                      <dt className="text-sm text-stone-500">{row.label}</dt>
+                      <dd className="text-sm font-medium text-stone-900 text-right">{row.value}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
             </div>
           </td>
         </tr>
