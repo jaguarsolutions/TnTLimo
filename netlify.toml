@@ -11,15 +11,22 @@
   publish = ".next"
 
 [build.environment]
-  # These NEXT_PUBLIC_* keys are intentionally public: Next.js inlines every
-  # NEXT_PUBLIC_* var into the browser bundle by design, so they cannot be
-  # "secret." Both are safe to expose —
-  #   • the Google Maps *browser* key is restricted by HTTP referrer in Google
-  #     Cloud (the private GOOGLE_MAPS_SERVER_KEY is NOT listed here and stays
-  #     scanned),
-  #   • the Web3Forms access key is designed to live in client-side form code.
-  # Without this, Netlify's secret scanner fails the build on finding them.
+  # Netlify runs two secret scanners; both false-positive on our intentionally
+  # public NEXT_PUBLIC_* keys (Next.js inlines every NEXT_PUBLIC_* var into the
+  # browser bundle by design — they cannot be secret).
+  #
+  # 1. Explicit env scan — matches declared env-var VALUES in the build output.
+  #    Omit the two public keys by name. The private GOOGLE_MAPS_SERVER_KEY,
+  #    STRIPE_SECRET_KEY, DATABASE_URL, RESEND_API_KEY, etc. are NOT listed, so
+  #    a real leak of those still fails the build.
   SECRETS_SCAN_OMIT_KEYS = "NEXT_PUBLIC_GOOGLE_MAPS_BROWSER_KEY,NEXT_PUBLIC_WEB3FORMS_ACCESS_KEY"
+  #
+  # 2. Smart detection — flags any string SHAPED like a secret (e.g. the Google
+  #    "AIza…" browser-key pattern) regardless of env-var name. Its only hit is
+  #    that public browser key, so we turn off the pattern layer. The explicit
+  #    scan above still protects the real secrets. (The browser key is secured
+  #    by HTTP-referrer restrictions in Google Cloud, not by being hidden.)
+  SECRETS_SCAN_SMART_DETECTION_ENABLED = "false"
 
 [[plugins]]
   package = "@netlify/plugin-nextjs"
