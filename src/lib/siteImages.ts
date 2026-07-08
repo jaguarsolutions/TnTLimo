@@ -29,8 +29,8 @@ export const SITE_IMAGES = {
   carSeatBooster: publicUrl("/images/site/car-seats/child-booster.jpg"),
   carSeatProduct: publicUrl("/images/site/car-seats/seat-product.jpg"),
   carSeatParentInstalling: publicUrl("/images/site/car-seats/parent-installing.jpg"),
-  blackSedan: publicUrl("/images/vehicle-sedan.png"),
-  blackSuv: publicUrl("/images/vehicle-suv.png"),
-  blackVan: publicUrl("/images/vehicle-van.png"),
-  blackSprinter: publicUrl("/images/vehicle-sprinter.png"),
+  blackSedan: publicUrl("/images/vehicle-sedan.webp"),
+  blackSuv: publicUrl("/images/vehicle-suv.webp"),
+  blackVan: publicUrl("/images/vehicle-van.webp"),
+  blackSprinter: publicUrl("/images/vehicle-sprinter.webp"),
 } as const;
