@@ -10,6 +10,17 @@
   # The Next.js runtime plugin manages the publish directory automatically.
   publish = ".next"
 
+[build.environment]
+  # These NEXT_PUBLIC_* keys are intentionally public: Next.js inlines every
+  # NEXT_PUBLIC_* var into the browser bundle by design, so they cannot be
+  # "secret." Both are safe to expose —
+  #   • the Google Maps *browser* key is restricted by HTTP referrer in Google
+  #     Cloud (the private GOOGLE_MAPS_SERVER_KEY is NOT listed here and stays
+  #     scanned),
+  #   • the Web3Forms access key is designed to live in client-side form code.
+  # Without this, Netlify's secret scanner fails the build on finding them.
+  SECRETS_SCAN_OMIT_KEYS = "NEXT_PUBLIC_GOOGLE_MAPS_BROWSER_KEY,NEXT_PUBLIC_WEB3FORMS_ACCESS_KEY"
+
 [[plugins]]
   package = "@netlify/plugin-nextjs"
 
