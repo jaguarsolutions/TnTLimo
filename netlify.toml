@@ -12,3 +12,18 @@
 
 [[plugins]]
   package = "@netlify/plugin-nextjs"
+
+# ── Static asset caching ──────────────────────────────────────────────────────
+# Images in /public have stable filenames, so let browsers and the Netlify CDN
+# hold them for 30 days. This cuts repeat bandwidth from return visitors and
+# crawlers re-fetching the same files (Next.js already sets immutable caching on
+# hashed /_next/static assets, so those aren't repeated here).
+[[headers]]
+  for = "/images/*"
+  [headers.values]
+    Cache-Control = "public, max-age=2592000, stale-while-revalidate=86400"
+
+[[headers]]
+  for = "/tnt-tours-logo.png"
+  [headers.values]
+    Cache-Control = "public, max-age=2592000, stale-while-revalidate=86400"
