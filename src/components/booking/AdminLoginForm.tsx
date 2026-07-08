@@ -1,10 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 
 export default function AdminLoginForm() {
-  const router = useRouter();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -28,7 +26,13 @@ export default function AdminLoginForm() {
       return;
     }
 
-    router.push("/admin/bookings");
+    // Full-document navigation (not router.push): the auth cookie was just set
+    // by the fetch above, and a client-side RSC navigation doesn't re-evaluate
+    // server-side auth state — it would leave the user stuck on this page until
+    // a manual refresh. A hard navigation issues a fresh request that the
+    // middleware evaluates against the now-present cookie, landing on the
+    // dashboard reliably. `status` stays "loading" until the page unloads.
+    window.location.assign("/admin/bookings");
   }
 
   return (
