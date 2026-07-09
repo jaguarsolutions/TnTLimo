@@ -105,7 +105,7 @@ export function vehicleCategoryFromPassengerGroup(group: string): VehicleCategor
 }
 
 export const SERVICE_LABELS: Record<BookableServiceCode | "disneyland-transportation", string> = {
-  "airport-transfer": "Airport Transfer",
+  "airport-transfer": "Airport Pickup & Drop-off",
   "disneyland-transportation": "Disneyland & Hotel Transportation",
   "point-to-point": "Point-to-Point Transportation",
   "hourly-charter": "Hourly Charter Service",

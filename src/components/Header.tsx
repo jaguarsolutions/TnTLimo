@@ -27,7 +27,7 @@ const navLinks: NavLink[] = [
         description: "Overview of every service",
       },
       {
-        label: "Airport Transfers",
+        label: "Airport Pickup & Drop-off",
         href: "/transportation/airport-transfer",
         description: "LAX, SNA, LGB, BUR, ONT, SAN",
       },

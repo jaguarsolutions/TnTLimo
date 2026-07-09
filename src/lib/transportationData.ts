@@ -33,7 +33,7 @@ export type TransportationServiceCode =
 export const TRANSPORTATION_SERVICES = [
   {
     code: "airport-transfer" as const,
-    title: "Airport Transfers",
+    title: "Airport Pickup & Drop-off",
     description:
       "Reliable private airport transportation to and from Anaheim, Disneyland-area hotels, and major Southern California airports including LAX, SNA, Long Beach, Burbank, Ontario, and San Diego.",
     highlight: "Arrive relaxed with meet & greet support plus free child seats on request.",
@@ -101,7 +101,7 @@ export const SELECTION_STEPS = [
 
 export const TRANSPORTATION_SERVICE_DETAILS = {
   "airport-transfer": {
-    title: "Airport Transfers",
+    title: "Airport Pickup & Drop-off",
     shortDescription:
       "Trusted private transportation for airport arrivals and departures across Orange County, Los Angeles, and San Diego airports.",
     bullets: [

@@ -16,7 +16,7 @@ const quickLinks = [
 
 const transportationLinks = [
   { label: "All transportation", href: "/transportation" },
-  { label: "Airport Transfers", href: "/transportation/airport-transfer" },
+  { label: "Airport Pickup & Drop-off", href: "/transportation/airport-transfer" },
   { label: "Point-to-Point", href: "/transportation/point-to-point" },
   { label: "Hourly Charter", href: "/transportation/hourly-charter" },
 ];

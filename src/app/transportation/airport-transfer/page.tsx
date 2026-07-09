@@ -17,7 +17,7 @@ export default function AirportTransferPage() {
     <>
       <Header />
       <TransportationServiceDetail
-        title="Airport Transfers"
+        title="Airport Pickup & Drop-off"
         description="Reliable private airport transportation to and from Anaheim, Disneyland-area hotels, and major Southern California airports including LAX, SNA, Long Beach, Burbank, Ontario, and San Diego."
         image={SITE_IMAGES.waltDisneyConcertHall}
         imageAlt="Airport transportation at a California hotel"
@@ -27,7 +27,7 @@ export default function AirportTransferPage() {
           "Round-trip pricing available for return flights.",
           "Great for families, groups, and convention travelers.",
         ]}
-        ctaLabel="Book airport transfer"
+        ctaLabel="Book airport pickup & drop-off"
         ctaHref="/transportation/book?service=airport-transfer"
         showCarSeatsCallout
       />
